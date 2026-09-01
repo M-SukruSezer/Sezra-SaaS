@@ -10,14 +10,16 @@ SGK/bordro) çekirdeğe gömülü.
 |---|---|
 | Çekirdek (kiracı, şube, RBAC, RLS, olay veri yolu, denetim izi, onboarding) | ✅ Tamam, testli |
 | CRM & Satış — veri katmanı, iş kuralları, raporlar | ✅ Tamam, testli |
-| CRM — API katmanı | ⬜ Sırada |
+| CRM — API katmanı | ✅ Tamam, testli |
 | CRM — UI | ⬜ Sırada |
 | Muhasebe & Finans | ⬜ |
 | İnsan Kaynakları & Bordro | ⬜ |
 | Satın Alma | ⬜ |
 
-43 otomatik test geçiyor (kiracı izolasyonu, şube izolasyonu, kayıt kuralları,
-modül aktivasyonu, KDV/tevkifat matematiği, olay yayını, denetim izi).
+**65 otomatik test geçiyor** — 43'ü veritabanı katmanında (kiracı ve şube
+izolasyonu, kayıt kuralları, modül aktivasyonu, KDV/tevkifat, olay yayını,
+denetim izi), 22'si API katmanında (aynı izolasyonun HTTP üzerinden de geçerli
+olduğunu doğrular).
 
 ## Hızlı başlangıç (yerel)
 
@@ -27,17 +29,30 @@ Sistem PostgreSQL'i üzerinde rolleri ve veritabanını oluştur:
 sudo -u postgres bash scripts/dev-db-setup.sh
 ```
 
-Ardından şemayı kur ve testleri çalıştır:
+Ortam dosyasını hazırla ve bağımlılıkları kur:
 
 ```bash
-DATABASE_URL=postgresql://sezra_owner:sezra_owner@localhost:5432/sezra_dev bash scripts/test.sh
+cp .env.example .env && npm install
 ```
 
-Yalnızca migration uygulamak için:
+Veritabanı + API testlerinin tamamını çalıştır:
 
 ```bash
-DATABASE_URL=postgresql://sezra_owner:sezra_owner@localhost:5432/sezra_dev bash scripts/migrate.sh
+bash scripts/test-api.sh
 ```
+
+API'yi çalıştır:
+
+```bash
+npm run dev
+```
+
+| Betik | İşlevi |
+|---|---|
+| `scripts/db-reset.sh` | şemayı sıfırdan kurar + demo veriyi yükler |
+| `scripts/test.sh` | veritabanı katmanı testleri (RLS, akış) |
+| `scripts/test-api.sh` | yukarıdakiler + TypeScript derlemesi + API testleri |
+| `scripts/migrate.sh` | yalnızca migration uygular |
 
 ### Roller
 

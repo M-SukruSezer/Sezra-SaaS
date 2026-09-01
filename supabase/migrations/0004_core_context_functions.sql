@@ -206,6 +206,22 @@ begin
     end if;
   end if;
 
+  -- Şube ataması: kullanıcının erişimi TEK şubeyle sınırlıysa, belirtilmeyen
+  -- branch_id o şubeye atanır.
+  --
+  -- Neden gerekli: RLS politikası `branch_id is null` satırları şube kısıtından
+  -- muaf tutar (tedarikçi, merkezî ürün gibi gerçekten kiracı geneli kayıtlar
+  -- için doğru davranış). Ama Düzce'ye kilitli bir temsilci şubesiz bir fırsat
+  -- açarsa, o fırsat kazara TÜM şubelere görünür hâle gelirdi. Varsayılanı
+  -- burada doldurmak bu sızıntı yolunu kapatır.
+  if tg_op = 'INSERT' and v_row ? 'branch_id' then
+    if new.branch_id is null then
+      select case when array_length(core.accessible_branch_ids(), 1) = 1
+                  then (core.accessible_branch_ids())[1] end
+        into new.branch_id;
+    end if;
+  end if;
+
   if tg_op = 'INSERT' then
     if v_row ? 'created_by' then
       if new.created_by is null then

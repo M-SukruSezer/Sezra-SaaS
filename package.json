@@ -1,0 +1,21 @@
+{
+  "name": "sezra-saas",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Çok kiracılı, modüler ERP SaaS platformu",
+  "workspaces": ["core", "modules/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev --workspace @sezra/api",
+    "build": "tsc --build",
+    "typecheck": "tsc --build --force",
+    "test:db": "bash scripts/test.sh",
+    "test:api": "node --test --experimental-strip-types apps/api/test/*.test.ts",
+    "migrate": "bash scripts/migrate.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": { "node": ">=22" }
+}
