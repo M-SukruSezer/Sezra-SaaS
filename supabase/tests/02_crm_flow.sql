@@ -139,10 +139,20 @@ select public.t_assert(
   exists (select 1 from core.events where topic = 'crm.lead.won'),
   'crm.lead.won olayı yayınlandı');
 
--- Henüz abone yok (finance modülü sonraki fazda) -> teslimat satırı da yok
+-- Muhasebe modülü sales.order.confirmed'a abone: tam olarak bir teslimat satırı
+-- düşmeli. Abonesi olmayan olaylar (crm.lead.won) için hiç satır olmamalı.
 select public.t_assert(
-  (select count(*) from core.event_deliveries) = 0,
-  'Abone olmayan olay için teslimat kuyruğu boş (fan-out doğru)');
+  (select count(*) from core.event_deliveries d
+    join core.events e on e.id = d.event_id
+   where e.topic = 'sales.order.confirmed') = 1,
+  'sales.order.confirmed için tek teslimat kuyruğa alındı',
+  (select count(*)::text from core.event_deliveries));
+
+select public.t_assert(
+  (select count(*) from core.event_deliveries d
+    join core.events e on e.id = d.event_id
+   where e.topic = 'crm.lead.won') = 0,
+  'Abonesi olmayan olay kuyruğa hiç girmez (fan-out doğru)');
 
 \echo ''
 \echo '=== 6. DENETİM İZİ ==='

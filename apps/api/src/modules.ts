@@ -1,5 +1,6 @@
 import { coreModule, type SezraModule } from '@sezra/core';
 import { crmModule } from '@sezra/crm';
+import { financeModule } from '@sezra/finance';
 
 /**
  * Yüklenecek modüller.
@@ -7,4 +8,4 @@ import { crmModule } from '@sezra/crm';
  * Yeni bir modül eklemek = migration'ını yazmak + bu listeye eklemek.
  * Sunucu, veritabanında core.modules'ta kayıtlı olmayan bir modülü reddeder.
  */
-export const modules: SezraModule[] = [coreModule, crmModule];
+export const modules: SezraModule[] = [coreModule, crmModule, financeModule];

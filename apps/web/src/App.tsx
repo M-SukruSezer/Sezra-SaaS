@@ -7,6 +7,10 @@ import { LeadsBoard } from './pages/LeadsBoard';
 import { LeadForm, LeadList } from './pages/Leads';
 import { OrderDetail, OrderList, QuotationDetail, QuotationList } from './pages/SalesDocs';
 import { Partners, Products } from './pages/Partners';
+import { InvoiceDetail, InvoiceList } from './pages/Invoices';
+import {
+  ChartOfAccounts, FinanceReports, JournalEntryDetail, JournalEntryList,
+} from './pages/Accounting';
 import { Reports } from './pages/Reports';
 
 function Gate() {
@@ -38,6 +42,14 @@ function Gate() {
         <Route path="crm/orders" element={<OrderList />} />
         <Route path="crm/orders/:id" element={<OrderDetail />} />
         <Route path="crm/reports" element={<Reports />} />
+        <Route path="finance/sales" element={<InvoiceList kind="sale" />} />
+        <Route path="finance/sales/:id" element={<InvoiceDetail kind="sale" />} />
+        <Route path="finance/purchases" element={<InvoiceList kind="purchase" />} />
+        <Route path="finance/purchases/:id" element={<InvoiceDetail kind="purchase" />} />
+        <Route path="finance/entries" element={<JournalEntryList />} />
+        <Route path="finance/entries/:id" element={<JournalEntryDetail />} />
+        <Route path="finance/reports" element={<FinanceReports />} />
+        <Route path="finance/accounts" element={<ChartOfAccounts />} />
         <Route path="partners" element={<Partners />} />
         <Route path="products" element={<Products />} />
         <Route path="*" element={<Navigate to="/" replace />} />

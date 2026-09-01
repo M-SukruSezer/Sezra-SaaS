@@ -1,0 +1,262 @@
+/**
+ * Muhasebe API testleri.
+ *
+ * api.test.ts'in bıraktığı durumdan devam eder: onaylanmış bir satış siparişi
+ * ve kuyrukta bekleyen sales.order.confirmed olayı vardır. Bu dosya gerçek
+ * EventWorker'ı çalıştırır — olayın faturaya dönüşmesi taklit edilmez.
+ */
+process.env.AUTH_MODE ??= 'dev';
+process.env.NODE_ENV = 'test';
+
+import { test, before, after, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import type { FastifyInstance } from 'fastify';
+
+const USERS = {
+  merve: '22222222-2222-2222-2222-222222222222',
+  ali:   '33333333-3333-3333-3333-333333333333',
+  deniz: '44444444-4444-4444-4444-444444444444',
+  rakip: '55555555-5555-5555-5555-555555555555',
+} as const;
+
+let app: FastifyInstance;
+let closeDb: () => Promise<void>;
+let invoiceId: string;
+
+const as = (user: string) => ({ 'x-user-id': user });
+const json = (res: { body: string }) => JSON.parse(res.body);
+const get = async (url: string, user: string) =>
+  json(await app.inject({ method: 'GET', url, headers: as(user) }));
+
+before(async () => {
+  const core = await import('@sezra/core');
+  const { modules } = await import('../src/modules.js');
+  closeDb = core.closeDb;
+  app = await core.createApp({ modules, logger: false });
+  await app.ready();
+
+  // Kuyruktaki olayları gerçek worker ile işle
+  const worker = new core.EventWorker();
+  const processed = await worker.drain();
+  assert.ok(processed >= 1, `en az bir olay işlenmeliydi, işlenen: ${processed}`);
+});
+
+after(async () => {
+  await app.close();
+  await closeDb();
+});
+
+describe('hesap planı', () => {
+  test('Tekdüzen Hesap Planı kurulmuş', async () => {
+    const res = await get('/finance/accounts?limit=500', USERS.merve);
+    assert.equal(res.meta.total, 63);
+    const codes = res.data.map((a: { code: string }) => a.code);
+    for (const expected of ['100', '120', '191', '320', '360', '391', '600', '621', '770']) {
+      assert.ok(codes.includes(expected), `${expected} hesabı olmalı`);
+    }
+  });
+
+  test('grup hesapları is_leaf = false', async () => {
+    const res = await get('/finance/accounts?code=12', USERS.merve);
+    assert.equal(res.data[0].is_leaf, false);
+  });
+
+  test('hesap eşlemeleri tanımlı', async () => {
+    const res = await get('/finance/settings/account-mappings', USERS.merve);
+    const byKey = Object.fromEntries(res.data.map((m: { key: string; code: string }) => [m.key, m.code]));
+    assert.equal(byKey.receivable, '120');
+    assert.equal(byKey.vat_output, '391');
+    assert.equal(byKey.sales_income, '600');
+  });
+});
+
+describe('olay -> fatura', () => {
+  test('onaylanan siparişten fatura taslağı üretildi', async () => {
+    const res = await get('/finance/invoices?source_module=crm', USERS.merve);
+    assert.equal(res.meta.total, 1);
+    const inv = res.data[0];
+    invoiceId = inv.id;
+    assert.equal(inv.status, 'draft');
+    assert.equal(inv.kind, 'sale');
+    assert.equal(Number(inv.total), 140183);
+    assert.equal(inv.partner_name, 'Düzce Üniversitesi Kantin İşl.');
+    assert.equal(Number(inv.line_count), 2);
+  });
+
+  test('CRM modülü Muhasebe tablolarına hiç dokunmadı — bağ yalnızca olay', async () => {
+    const inv = (await get(`/finance/invoices/${invoiceId}/full`, USERS.merve)).data;
+    assert.equal(inv.source_module, 'crm');
+    assert.equal(inv.source_table, 'sale_orders');
+    assert.ok(inv.source_id);
+  });
+});
+
+describe('faturanın muhasebeleşmesi', () => {
+  test('muhasebeleştir -> numara ve dengeli yevmiye kaydı', async () => {
+    const res = await app.inject({
+      method: 'POST', url: `/finance/invoices/${invoiceId}/post`, headers: as(USERS.merve) });
+    assert.equal(res.statusCode, 200);
+    const inv = json(res).data;
+    assert.match(inv.number, /^SFT-\d{4}-\d{6}$/);
+    assert.equal(inv.status, 'posted');
+
+    const entry = (await get(`/finance/entries/${inv.journal_entry_id}/full`, USERS.merve)).data;
+    assert.equal(Number(entry.total_debit), 140183);
+    assert.equal(Number(entry.total_credit), 140183);
+    assert.equal(entry.status, 'posted');
+
+    const byAccount = Object.fromEntries(
+      entry.lines.map((l: { account_code: string; debit: string; credit: string }) =>
+        [l.account_code, { debit: Number(l.debit), credit: Number(l.credit) }]),
+    );
+    assert.equal(byAccount['120'].debit, 140183);   // ALICILAR
+    assert.equal(byAccount['600'].credit, 136300);  // YURTİÇİ SATIŞLAR
+    assert.equal(byAccount['391'].credit, 3883);    // HESAPLANAN KDV
+  });
+
+  test('muhasebeleşmiş faturanın satırı değiştirilemez', async () => {
+    const inv = (await get(`/finance/invoices/${invoiceId}/full`, USERS.merve)).data;
+    const res = await app.inject({
+      method: 'PATCH', url: `/finance/invoice-lines/${inv.lines[0].id}`,
+      headers: as(USERS.merve), payload: { quantity: 5 },
+    });
+    assert.equal(res.statusCode, 422);
+  });
+
+  test('yetkisiz kullanıcı muhasebeleştiremez', async () => {
+    const res = await app.inject({
+      method: 'POST', url: `/finance/invoices/${invoiceId}/post`, headers: as(USERS.ali) });
+    assert.ok([403, 404].includes(res.statusCode), `beklenen 403/404, gelen ${res.statusCode}`);
+  });
+});
+
+describe('tahsilat', () => {
+  test('kısmi ve tam tahsilat fatura durumunu ilerletir', async () => {
+    const partial = await app.inject({
+      method: 'POST', url: `/finance/invoices/${invoiceId}/pay`,
+      headers: as(USERS.merve), payload: { amount: 40183, method: 'bank' },
+    });
+    assert.equal(partial.statusCode, 200);
+    assert.match(json(partial).data.number, /^TAH-/);
+
+    let inv = (await get(`/finance/invoices/${invoiceId}`, USERS.merve)).data;
+    assert.equal(inv.status, 'partially_paid');
+    assert.equal(Number(inv.balance_due), 100000);
+
+    const rest = await app.inject({
+      method: 'POST', url: `/finance/invoices/${invoiceId}/pay`,
+      headers: as(USERS.merve), payload: {},
+    });
+    assert.equal(rest.statusCode, 200);
+
+    inv = (await get(`/finance/invoices/${invoiceId}`, USERS.merve)).data;
+    assert.equal(inv.status, 'paid');
+    assert.equal(Number(inv.balance_due), 0);
+  });
+
+  test('fazla tahsilat reddedilir', async () => {
+    const res = await app.inject({
+      method: 'POST', url: `/finance/invoices/${invoiceId}/pay`,
+      headers: as(USERS.merve), payload: { amount: 1 },
+    });
+    assert.notEqual(res.statusCode, 200);
+  });
+});
+
+describe('raporlar', () => {
+  test('mizan dengeli', async () => {
+    const res = await get('/finance/reports/trial-balance', USERS.merve);
+    const debit = res.data.reduce((s: number, r: { debit_total: string }) => s + Number(r.debit_total), 0);
+    const credit = res.data.reduce((s: number, r: { credit_total: string }) => s + Number(r.credit_total), 0);
+    assert.equal(Math.round((debit - credit) * 100), 0);
+  });
+
+  test('kâr/zarar tablosu', async () => {
+    const res = await get('/finance/reports/profit-loss?detail=1', USERS.merve);
+    assert.equal(Number(res.data.summary.gross_revenue), 136300);
+    assert.equal(Number(res.data.summary.net_profit), 136300);
+    assert.ok(res.data.accounts.some((a: { code: string }) => a.code === '600'));
+    assert.ok(res.data.by_branch.length >= 1);
+  });
+
+  test('KDV özeti', async () => {
+    const res = await get('/finance/reports/vat', USERS.merve);
+    const sale = res.data.filter((r: { kind: string }) => r.kind === 'sale');
+    const total = sale.reduce((s: number, r: { tax_amount: string }) => s + Number(r.tax_amount), 0);
+    assert.equal(total, 3883);
+  });
+
+  test('defter-i kebir 120 hesabında hareketleri gösterir', async () => {
+    const accounts = await get('/finance/accounts?code=120', USERS.merve);
+    const res = await get(
+      `/finance/reports/general-ledger?account_id=${accounts.data[0].id}`, USERS.merve);
+    assert.ok(res.data.length >= 3);   // fatura + iki tahsilat
+    const last = res.data[res.data.length - 1];
+    assert.equal(Math.round(Number(last.running_balance) * 100), 0);  // cari kapandı
+  });
+
+  test('ödenmiş fatura açık faturalardan çıkar', async () => {
+    const res = await get('/finance/reports/open-invoices?kind=sale', USERS.merve);
+    assert.equal(res.data.length, 0);
+  });
+});
+
+describe('e-Fatura', () => {
+  test('fatura entegratöre gönderilir ve durumu izlenir', async () => {
+    const res = await app.inject({
+      method: 'POST', url: `/finance/invoices/${invoiceId}/einvoice`,
+      headers: as(USERS.merve), payload: {},
+    });
+    assert.equal(res.statusCode, 201);
+    const doc = json(res).data;
+    assert.equal(doc.provider, 'stub');
+    assert.ok(doc.ettn, 'ETTN üretilmeli');
+    // Müşterinin VKN'si 10 hane -> e-Fatura mükellefi -> TEMELFATURA
+    assert.equal(doc.profile, 'TEMELFATURA');
+
+    const list = await get(`/finance/invoices/${invoiceId}/einvoice`, USERS.merve);
+    assert.equal(list.data.length, 1);
+    assert.equal(list.data[0].status, 'sent');
+  });
+
+  test('alış faturası gönderilemez', async () => {
+    const purchases = await get('/finance/invoices?kind=purchase', USERS.merve);
+    if (purchases.data.length === 0) return;
+    const res = await app.inject({
+      method: 'POST', url: `/finance/invoices/${purchases.data[0].id}/einvoice`,
+      headers: as(USERS.merve), payload: {},
+    });
+    assert.equal(res.statusCode, 400);
+  });
+});
+
+describe('izolasyon', () => {
+  test('başka kiracı Colombia muhasebesini göremez', async () => {
+    const inv = await get('/finance/invoices', USERS.rakip);
+    assert.equal(inv.meta.total, 0);
+    const tb = await get('/finance/reports/trial-balance', USERS.rakip);
+    assert.equal(tb.data.length, 0);
+  });
+
+  test('başka kiracı KENDİ hesap planını görür', async () => {
+    const res = await get('/finance/accounts?limit=500', USERS.rakip);
+    assert.equal(res.meta.total, 63);
+  });
+
+  test('satış temsilcisi muhasebe raporlarını göremez', async () => {
+    const me = await get('/me', USERS.ali);
+    assert.ok(!me.permissions.includes('finance.report.pl'));
+    const pl = await get('/finance/reports/profit-loss', USERS.ali);
+    assert.equal(pl.data.summary?.gross_revenue ?? null, null);
+  });
+
+  test('şube müdürü kendi şubesinin faturalarını görür, muhasebeleştiremez', async () => {
+    const me = await get('/me', USERS.deniz);
+    assert.ok(me.permissions.includes('finance.report.pl'));
+    assert.ok(!me.permissions.includes('finance.invoice.post'));
+
+    const inv = await get('/finance/invoices?limit=100', USERS.deniz);
+    const withBranch = inv.data.filter((i: { branch_id: string | null }) => i.branch_id !== null);
+    assert.equal(withBranch.length, 0, 'Düzce faturaları Zonguldak müdürüne görünmemeli');
+  });
+});

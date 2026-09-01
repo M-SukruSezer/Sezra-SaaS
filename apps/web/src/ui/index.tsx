@@ -27,11 +27,19 @@ export function Stat({ label, value, hint }: { label: string; value: ReactNode; 
   );
 }
 
+// Tüm modüllerin durum kodları tek sözlükte: bir modül kendi rozet rengini
+// ya da Türkçe karşılığını yeniden uydurmaz.
 const STATUS_TONE: Record<string, string> = {
+  // CRM
   draft: '', sent: 'badge-info', accepted: 'badge-ok', rejected: 'badge-danger',
   expired: 'badge-warn', cancelled: 'badge-danger', confirmed: 'badge-ok',
   delivered: 'badge-ok', invoiced: 'badge-ok',
   open: 'badge-info', won: 'badge-ok', lost: 'badge-danger',
+  // Muhasebe
+  approved: 'badge-info', posted: 'badge-ok', partially_paid: 'badge-warn',
+  paid: 'badge-ok', reversed: 'badge-danger',
+  // e-Fatura
+  queued: 'badge-warn', error: 'badge-danger',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -39,6 +47,9 @@ const STATUS_LABEL: Record<string, string> = {
   expired: 'Süresi doldu', cancelled: 'İptal', confirmed: 'Onaylandı',
   delivered: 'Teslim edildi', invoiced: 'Faturalandı',
   open: 'Açık', won: 'Kazanıldı', lost: 'Kaybedildi',
+  approved: 'Onaylandı', posted: 'Muhasebeleşti', partially_paid: 'Kısmen ödendi',
+  paid: 'Ödendi', reversed: 'Ters kayıt alındı',
+  queued: 'Kuyrukta', error: 'Hata',
 };
 
 export function StatusBadge({ status }: { status: string }) {

@@ -20,6 +20,16 @@ const NAV: { group: string; items: NavEntry[] }[] = [
     ],
   },
   {
+    group: 'Muhasebe & Finans',
+    items: [
+      { to: '/finance/sales',     label: 'Satış Faturaları',  module: 'finance', permission: 'finance.invoice.read.all' },
+      { to: '/finance/purchases', label: 'Alış Faturaları',   module: 'finance', permission: 'finance.invoice.read.all' },
+      { to: '/finance/entries',   label: 'Yevmiye Defteri',   module: 'finance', permission: 'finance.entry.read.all' },
+      { to: '/finance/reports',   label: 'Muhasebe Raporları',module: 'finance', permission: 'finance.report.read' },
+      { to: '/finance/accounts',  label: 'Hesap Planı',       module: 'finance', permission: 'finance.account.read.all' },
+    ],
+  },
+  {
     group: 'Ana Veri',
     items: [
       { to: '/partners', label: t('nav.partners'), permission: 'core.partner.read.all' },

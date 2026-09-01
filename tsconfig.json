@@ -3,6 +3,7 @@
   "references": [
     { "path": "./core" },
     { "path": "./modules/crm" },
+    { "path": "./modules/finance" },
     { "path": "./apps/api" }
   ]
 }

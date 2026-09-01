@@ -141,3 +141,59 @@ paketi bunu her çalışmada denetler.
 
 Türkçe-native ama `tenants.locale` / `users.locale` ilk günden şemada.
 Sonradan eklemenin maliyeti, baştan koymanın maliyetinin katbekatıdır.
+
+
+## 11. Muhasebe: değişmezlik ve türetilmiş bakiyeler
+
+**Muhasebeleşmiş kayıt değiştirilemez.** `posted` bir yevmiye kaydı ne
+güncellenebilir ne silinebilir; düzeltmenin tek yolu ters kayıttır. Bu mali
+mevzuatın gereği olduğu kadar denetim izinin de temeli: "kayıt sonradan
+düzeltilmiş mi?" sorusu veri modelinde cevaplanamaz hâle getirilmemelidir.
+Ters kayıt orijinalin bakiye etkisini SİLMEZ, nötrler.
+
+**Bakiyeler artırımlı tutulur.** Mizan ve P&L her sorgulandığında tüm yevmiye
+satırlarını taramak, veri büyüdükçe kabul edilemez. `finance.account_balances`,
+muhasebeleşme anında tetikleyiciyle güncellenir; raporlar oradan okur. Bu,
+mevcut P&L sisteminizdeki trigger yaklaşımının kiracı ve şube kırılımıyla
+genelleştirilmiş hâlidir.
+
+**Hesaplar koda gömülmez.** Otomatik kayıtların hangi hesabı kullanacağı
+`finance.account_mappings` üzerinden çözülür. Kod yalnızca ANLAMI bilir
+(`receivable`, `vat_output`); hangi hesap olduğunu kiracı belirler. Hesap
+planını özelleştiren bir kiracı kod değişikliği gerektirmez.
+
+### Tevkifat kaydı
+
+Tevkifatta satıcı KDV'nin tevkif edilen kısmını tahsil etmez; alıcı o kısmı
+doğrudan vergi dairesine öder. Kayıtlar bu ekonomik gerçeği yansıtır:
+
+| Satış faturası | Borç | Alacak |
+|---|---|---|
+| 120 ALICILAR | matrah + KDV − tevkifat | |
+| 600 YURTİÇİ SATIŞLAR | | matrah |
+| 391 HESAPLANAN KDV | | KDV − tevkifat |
+
+| Alış faturası | Borç | Alacak |
+|---|---|---|
+| 153 / 770 (satır hesabı) | matrah | |
+| 191 İNDİRİLECEK KDV | KDV (tamamı) | |
+| 320 SATICILAR | | matrah + KDV − tevkifat |
+| 360 ÖDENECEK VERGİ VE FONLAR | | tevkifat |
+
+## 12. e-Fatura: sağlayıcı seçimi ertelenmiş bir karar
+
+Entegratör seçimi henüz yapılmadı (Bölüm 11 açık sorusu). Bu yüzden ürünün
+geri kalanı somut bir entegratöre değil, `EInvoiceProvider` arayüzüne bağlanır.
+`CanonicalInvoice`, UBL-TR'ye birebir karşılık gelmeyen, iş anlamı taşıyan bir
+ara temsildir; UBL üretimi adapter'ın işidir.
+
+Yer tutucu `stub` sağlayıcı GİB'e hiçbir şey göndermez. `NODE_ENV=production`
+altında kullanılması açıkça `EINVOICE_ALLOW_STUB=yes` ile izin verilmedikçe
+hata verir — "faturalar gidiyor sanırken gitmiyor" durumunu imkânsız kılar.
+
+## 13. `sum(...) filter` NULL döndürür
+
+P&L özet görünümünde her filtreli toplam `coalesce(..., 0)` ile sarmalanır.
+Eşleşen satır yoksa `sum(...) filter (...)` sıfır değil **NULL** döner; henüz
+gideri olmayan bir işletmede bu, net kârın NULL çıkmasına ve raporun "kâr yok"
+gibi görünmesine yol açar. Aynı tuzak cari yaşlandırma görünümünde de vardı.

@@ -12,14 +12,27 @@ SGK/bordro) çekirdeğe gömülü.
 | CRM & Satış — veri katmanı, iş kuralları, raporlar | ✅ Tamam, testli |
 | CRM — API katmanı | ✅ Tamam, testli |
 | CRM — UI (React) | ✅ Tamam, tarayıcıda doğrulandı |
-| Muhasebe & Finans | ⬜ |
+| Muhasebe & Finans | ✅ Tamam, testli (veri + API + UI) |
 | İnsan Kaynakları & Bordro | ⬜ |
 | Satın Alma | ⬜ |
 
-**65 otomatik test geçiyor** — 43'ü veritabanı katmanında (kiracı ve şube
-izolasyonu, kayıt kuralları, modül aktivasyonu, KDV/tevkifat, olay yayını,
-denetim izi), 22'si API katmanında (aynı izolasyonun HTTP üzerinden de geçerli
-olduğunu doğrular).
+**141 otomatik test geçiyor** — 98'i veritabanı katmanında (kiracı ve şube
+izolasyonu, kayıt kuralları, modül aktivasyonu, KDV/tevkifat, çift taraflı kayıt,
+muhasebe değişmezliği, kapalı dönem, olay yayını, denetim izi), 43'ü API
+katmanında (aynı izolasyonun HTTP üzerinden de geçerli olduğunu ve uçtan uca
+akışın çalıştığını doğrular).
+
+### Uçtan uca çalışan akış
+
+```
+CRM: teklif → onay → sipariş → onay
+        ↓ sales.order.confirmed olayı (transactional outbox)
+Muhasebe: fatura taslağı → muhasebeleştir → yevmiye kaydı (120 / 600 / 391)
+        ↓
+        tahsilat → 102 BANKALAR → mizan → kâr/zarar → KDV özeti → e-Fatura
+```
+
+CRM, Muhasebe modülünün varlığını bilmez; tek bağ olaydır.
 
 ## Hızlı başlangıç (yerel)
 

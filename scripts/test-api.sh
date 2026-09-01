@@ -12,4 +12,4 @@ bash scripts/db-reset.sh
 echo "✓ veritabanı temiz duruma döndürüldü"
 echo
 
-AUTH_MODE=dev NODE_ENV=test node --import tsx --test apps/api/test/*.test.ts
+AUTH_MODE=dev NODE_ENV=test node --import tsx --test --test-concurrency=1 apps/api/test/*.test.ts
