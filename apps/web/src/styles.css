@@ -1,0 +1,170 @@
+/* =============================================================================
+   Tasarım sistemi — tüm modüllerde ortak.
+   Tek bir token katmanı: modüller kendi rengini/aralığını uydurmaz.
+   ============================================================================= */
+:root {
+  --c-bg:        #f6f7f9;
+  --c-surface:   #ffffff;
+  --c-surface-2: #f0f2f5;
+  --c-border:    #dfe3e8;
+  --c-text:      #1c2024;
+  --c-text-soft: #61676d;
+  --c-text-mute: #8b9096;
+
+  --c-brand:      #6b4423;   /* kahve — F&B odaklı ilk hedef kitleye selam */
+  --c-brand-soft: #f3ece5;
+  --c-accent:     #1a6b52;
+  --c-danger:     #b3261e;
+  --c-warn:       #9a6700;
+  --c-info:       #17506b;
+
+  --r-sm: 4px; --r-md: 8px; --r-lg: 12px;
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: var(--font);
+  font-size: 14px; line-height: 1.5;
+  color: var(--c-text); background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+
+/* ---------- Kabuk ---------- */
+.shell { display: grid; grid-template-columns: 232px 1fr; height: 100%; }
+.sidebar {
+  background: var(--c-surface); border-right: 1px solid var(--c-border);
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.brand {
+  padding: var(--s-4); font-weight: 700; font-size: 15px; letter-spacing: -.01em;
+  border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: var(--s-2);
+}
+.brand-mark {
+  width: 22px; height: 22px; border-radius: var(--r-sm);
+  background: var(--c-brand); color: #fff;
+  display: grid; place-items: center; font-size: 12px;
+}
+.nav { padding: var(--s-3) var(--s-2); display: flex; flex-direction: column; gap: 1px; }
+.nav-group {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--c-text-mute); padding: var(--s-3) var(--s-3) var(--s-1);
+}
+.nav-item {
+  padding: 7px var(--s-3); border-radius: var(--r-sm); color: var(--c-text-soft);
+  display: flex; align-items: center; gap: var(--s-2); cursor: pointer;
+}
+.nav-item:hover { background: var(--c-surface-2); color: var(--c-text); }
+.nav-item.active { background: var(--c-brand-soft); color: var(--c-brand); font-weight: 600; }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  height: 52px; background: var(--c-surface); border-bottom: 1px solid var(--c-border);
+  display: flex; align-items: center; gap: var(--s-3); padding: 0 var(--s-5);
+}
+.topbar .spacer { flex: 1; }
+.content { padding: var(--s-5); overflow-y: auto; flex: 1; }
+
+/* ---------- Tipografi ---------- */
+.page-head { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-4); }
+.page-title { font-size: 19px; font-weight: 650; letter-spacing: -.01em; margin: 0; }
+.page-sub { color: var(--c-text-soft); font-size: 13px; margin: 2px 0 0; }
+.muted { color: var(--c-text-mute); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- Yüzeyler ---------- */
+.card {
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-lg); box-shadow: var(--shadow);
+}
+.card-head {
+  padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--c-border);
+  display: flex; align-items: center; gap: var(--s-3); font-weight: 600;
+}
+.card-body { padding: var(--s-4); }
+.grid { display: grid; gap: var(--s-4); }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.grid-4 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.row { display: flex; align-items: center; gap: var(--s-2); }
+
+/* ---------- Ölçüm kartı ---------- */
+.stat { padding: var(--s-4); }
+.stat-label { font-size: 12px; color: var(--c-text-soft); }
+.stat-value { font-size: 22px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+/* ---------- Tablo ---------- */
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th {
+  text-align: left; font-weight: 600; color: var(--c-text-soft); font-size: 12px;
+  padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--c-border); white-space: nowrap;
+}
+.tbl td { padding: 9px var(--s-3); border-bottom: 1px solid var(--c-surface-2); }
+.tbl tbody tr:hover { background: var(--c-surface-2); }
+.tbl td.r, .tbl th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl-wrap { overflow-x: auto; }
+
+/* ---------- Form ---------- */
+.field { display: flex; flex-direction: column; gap: var(--s-1); margin-bottom: var(--s-3); }
+.field label { font-size: 12px; font-weight: 600; color: var(--c-text-soft); }
+.field .hint { font-size: 12px; color: var(--c-text-mute); }
+input, select, textarea {
+  font: inherit; padding: 7px 10px; border: 1px solid var(--c-border);
+  border-radius: var(--r-sm); background: var(--c-surface); color: var(--c-text); width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--c-brand); outline-offset: -1px; border-color: var(--c-brand);
+}
+input:disabled, select:disabled { background: var(--c-surface-2); color: var(--c-text-mute); }
+
+/* ---------- Buton ---------- */
+.btn {
+  font: inherit; font-weight: 550; padding: 7px 14px; border-radius: var(--r-sm);
+  border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text);
+  cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover:not(:disabled) { background: var(--c-surface-2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--c-brand); border-color: var(--c-brand); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #573619; }
+.btn-danger { color: var(--c-danger); border-color: #e8c9c7; }
+.btn-sm { padding: 4px 9px; font-size: 12px; }
+
+/* ---------- Rozet ---------- */
+.badge {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; background: var(--c-surface-2); color: var(--c-text-soft);
+}
+.badge-ok    { background: #e3f2ec; color: var(--c-accent); }
+.badge-warn  { background: #fdf3d7; color: var(--c-warn); }
+.badge-info  { background: #e2eef4; color: var(--c-info); }
+.badge-danger{ background: #fbe9e8; color: var(--c-danger); }
+
+/* ---------- Kanban ---------- */
+.board { display: flex; gap: var(--s-3); align-items: flex-start; overflow-x: auto; padding-bottom: var(--s-4); }
+.board-col { flex: 0 0 268px; background: var(--c-surface-2); border-radius: var(--r-lg); padding: var(--s-2); }
+.board-col-head { padding: var(--s-2) var(--s-2) var(--s-3); }
+.board-col-title { font-weight: 650; font-size: 13px; display: flex; justify-content: space-between; }
+.board-col-total { font-size: 12px; color: var(--c-text-soft); font-variant-numeric: tabular-nums; }
+.lead-card {
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-md);
+  padding: var(--s-3); margin-bottom: var(--s-2); cursor: pointer;
+}
+.lead-card:hover { border-color: var(--c-brand); }
+.lead-card-title { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.lead-card-meta { font-size: 12px; color: var(--c-text-soft); display: flex; justify-content: space-between; gap: var(--s-2); }
+
+/* ---------- Çeşitli ---------- */
+.empty { padding: var(--s-6); text-align: center; color: var(--c-text-mute); }
+.error-box {
+  background: #fbe9e8; border: 1px solid #f0cfcd; color: var(--c-danger);
+  padding: var(--s-3); border-radius: var(--r-md); margin-bottom: var(--s-4); font-size: 13px;
+}
+.toolbar { display: flex; gap: var(--s-2); align-items: center; margin-bottom: var(--s-4); flex-wrap: wrap; }
+.toolbar input[type="search"] { width: 260px; }
+.split { display: grid; grid-template-columns: 1fr 320px; gap: var(--s-4); align-items: start; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } .shell { grid-template-columns: 1fr; } .sidebar { display: none; } }

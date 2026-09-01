@@ -9,6 +9,13 @@ export interface ResourceDef {
   path: string;
   schema: string;
   table: string;
+  /**
+   * Okuma için kullanılacak görünüm (ör. 'v_sale_order_list'). Yazma her zaman
+   * `table`'a gider. Liste ekranları neredeyse hep ilişkili adları (cari, sorumlu)
+   * ister; her modülde elle join uçları yazmak yerine görünüm bağlanır.
+   * Görünüm `security_invoker = on` olmalıdır — aksi hâlde RLS atlanır.
+   */
+  readFrom?: string;
   /** Okunabilir kolonlar — beyaz liste; buraya yazılmayan kolon API'den dönmez */
   columns: readonly string[];
   /** Yazılabilir kolonlar. tenant_id ASLA buraya konmaz: veritabanı doldurur. */
@@ -57,7 +64,7 @@ function parseFilters(query: Record<string, unknown>, allowed: readonly string[]
 
 export function registerResource(app: FastifyInstance, def: ResourceDef): void {
   const {
-    path, schema, table, columns, writable,
+    path, schema, table, readFrom, columns, writable,
     filterable = columns,
     searchable = [],
     sortable = columns,
@@ -65,6 +72,7 @@ export function registerResource(app: FastifyInstance, def: ResourceDef): void {
     defaultOrder = 'desc',
     maxLimit = 200,
   } = def;
+  const readRel = readFrom ?? table;
 
   const run = async <T>(req: FastifyRequest, fn: (tx: Tx) => Promise<T>): Promise<T> => {
     const ctx = contextFromRequest(req);
@@ -116,7 +124,7 @@ export function registerResource(app: FastifyInstance, def: ResourceDef): void {
 
       return tx`
         select ${tx(columns as string[])}, count(*) over() as total_count
-        from ${tx(schema)}.${tx(table)}
+        from ${tx(schema)}.${tx(readRel)}
         where ${where}
         order by ${tx(sortCol)} ${order === 'asc' ? tx`asc` : tx`desc`} nulls last
         limit ${limit} offset ${offset}
@@ -135,7 +143,7 @@ export function registerResource(app: FastifyInstance, def: ResourceDef): void {
   app.get(`${path}/:id`, async (req) => {
     const { id } = req.params as { id: string };
     const rows = await run(req, (tx) => tx`
-      select ${tx(columns as string[])} from ${tx(schema)}.${tx(table)} where id = ${id} limit 1
+      select ${tx(columns as string[])} from ${tx(schema)}.${tx(readRel)} where id = ${id} limit 1
     `);
     // RLS gizlediğinde de 0 satır döner; "yok" ile "yetkin yok" ayrılmaz (bkz. errors.ts)
     if (rows.length === 0) throw notFound();
@@ -154,10 +162,13 @@ export function registerResource(app: FastifyInstance, def: ResourceDef): void {
     }
     if (Object.keys(payload).length === 0) throw badRequest('Yazılabilir alan yok');
 
-    const rows = await run(req, (tx) => tx`
-      insert into ${tx(schema)}.${tx(table)} ${tx(payload)}
-      returning ${tx(columns as string[])}
-    `);
+    const rows = await run(req, async (tx) => {
+      const [created] = await tx`
+        insert into ${tx(schema)}.${tx(table)} ${tx(payload)} returning id`;
+      // Görünüm bağlıysa oluşan kaydı oradan okuyup zenginleştirilmiş hâlini döneriz
+      return tx`select ${tx(columns as string[])} from ${tx(schema)}.${tx(readRel)}
+                where id = ${(created as { id: string }).id}`;
+    });
     reply.code(201);
     return { data: rows[0] };
   });
@@ -173,11 +184,13 @@ export function registerResource(app: FastifyInstance, def: ResourceDef): void {
     }
     if (Object.keys(payload).length === 0) throw badRequest('Güncellenecek alan yok');
 
-    const rows = await run(req, (tx) => tx`
-      update ${tx(schema)}.${tx(table)} set ${tx(payload)}
-      where id = ${id}
-      returning ${tx(columns as string[])}
-    `);
+    const rows = await run(req, async (tx) => {
+      const updated = await tx`
+        update ${tx(schema)}.${tx(table)} set ${tx(payload)} where id = ${id} returning id`;
+      if (updated.length === 0) return [];
+      return tx`select ${tx(columns as string[])} from ${tx(schema)}.${tx(readRel)}
+                where id = ${id}`;
+    });
     if (rows.length === 0) throw notFound();
     return { data: rows[0] };
   });

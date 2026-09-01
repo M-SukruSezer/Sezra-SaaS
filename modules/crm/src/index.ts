@@ -34,12 +34,15 @@ export const crmModule: SezraModule = {
     // ========================= Kaynaklar =========================
     registerResource(app, {
       path: '/crm/leads',
-      schema: 'crm', table: 'leads',
-      columns: [...LEAD_COLUMNS],
+      schema: 'crm', table: 'leads', readFrom: 'v_lead_list',
+      columns: [...LEAD_COLUMNS, 'partner_name', 'owner_name', 'stage_name',
+        'branch_name', 'lost_reason_name'],
       writable: ['branch_id', 'pipeline_id', 'stage_id', 'name', 'partner_id', 'contact_name',
         'email', 'phone', 'source', 'expected_revenue', 'currency', 'priority',
         'lost_reason_id', 'lost_note', 'expected_close_date', 'tags', 'notes', 'owner_id'],
+      filterable: [...LEAD_COLUMNS],
       searchable: ['name', 'contact_name', 'email', 'phone'],
+      sortable: [...LEAD_COLUMNS],
       defaultSort: 'updated_at',
     });
 
@@ -56,14 +59,16 @@ export const crmModule: SezraModule = {
 
     registerResource(app, {
       path: '/crm/quotations',
-      schema: 'crm', table: 'quotations',
+      schema: 'crm', table: 'quotations', readFrom: 'v_quotation_list',
       columns: [...DOC_HEADER_COLUMNS, 'lead_id', 'issue_date', 'valid_until',
-        'accepted_at', 'rejected_at'],
+        'accepted_at', 'rejected_at', 'partner_name', 'owner_name', 'branch_name', 'line_count'],
       // number/status/tutarlar YAZILAMAZ: numarayı sekans, durumu iş akışı,
       // tutarları satır trigger'ları belirler. API'den yazdırmak bunları bozar.
       writable: ['branch_id', 'partner_id', 'lead_id', 'issue_date', 'valid_until',
         'currency', 'payment_term_days', 'notes', 'owner_id'],
-      searchable: ['number', 'notes'],
+      filterable: [...DOC_HEADER_COLUMNS, 'lead_id', 'issue_date'],
+      searchable: ['number', 'notes', 'partner_name'],
+      sortable: [...DOC_HEADER_COLUMNS, 'issue_date'],
       defaultSort: 'issue_date',
     });
 
@@ -78,12 +83,14 @@ export const crmModule: SezraModule = {
 
     registerResource(app, {
       path: '/crm/sale-orders',
-      schema: 'crm', table: 'sale_orders',
+      schema: 'crm', table: 'sale_orders', readFrom: 'v_sale_order_list',
       columns: [...DOC_HEADER_COLUMNS, 'quotation_id', 'order_date', 'delivery_date',
-        'confirmed_at', 'cancelled_at'],
+        'confirmed_at', 'cancelled_at', 'partner_name', 'owner_name', 'branch_name', 'line_count'],
       writable: ['branch_id', 'partner_id', 'order_date', 'delivery_date', 'currency',
         'payment_term_days', 'notes', 'owner_id'],
-      searchable: ['number', 'notes'],
+      filterable: [...DOC_HEADER_COLUMNS, 'quotation_id', 'order_date'],
+      searchable: ['number', 'notes', 'partner_name'],
+      sortable: [...DOC_HEADER_COLUMNS, 'order_date'],
       defaultSort: 'order_date',
     });
 
@@ -281,10 +288,26 @@ export const crmModule: SezraModule = {
         data: await tx`select * from crm.v_lost_reason_analysis order by lost_count desc`,
       })));
 
-    app.get('/crm/reports/pipeline', async (req) =>
-      run(req, async (tx) => ({
-        data: await tx`select * from crm.v_pipeline_summary order by sequence`,
-      })));
+    /**
+     * Huni özeti. Görünüm şube kırılımlı olduğu için aynı aşama birden fazla
+     * satırla döner; varsayılan olarak aşama bazında toplanır.
+     * ?by_branch=1 ile ham şube kırılımı alınır.
+     */
+    app.get('/crm/reports/pipeline', async (req) => {
+      const { by_branch } = req.query as { by_branch?: string };
+      return run(req, async (tx) => ({
+        data: by_branch
+          ? await tx`select * from crm.v_pipeline_summary order by sequence`
+          : await tx`
+              select stage_id, stage_name, sequence,
+                     sum(lead_count)        as lead_count,
+                     sum(total_revenue)     as total_revenue,
+                     sum(weighted_revenue)  as weighted_revenue
+              from crm.v_pipeline_summary
+              group by stage_id, stage_name, sequence
+              order by sequence`,
+      }));
+    });
 
     app.get('/crm/reports/overdue-activities', async (req) =>
       run(req, async (tx) => ({

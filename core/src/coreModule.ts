@@ -11,11 +11,15 @@ export const coreModule: SezraModule = {
   register(app: FastifyInstance) {
     registerResource(app, {
       path: '/core/partners',
-      schema: 'core', table: 'partners',
+      schema: 'core', table: 'partners', readFrom: 'v_partner_list',
       columns: ['id', 'branch_id', 'code', 'name', 'is_company', 'is_customer', 'is_supplier',
         'is_employee', 'tax_office', 'tax_no', 'email', 'phone', 'address', 'district', 'city',
         'postal_code', 'country_code', 'iban', 'payment_term_days', 'credit_limit', 'notes',
-        'tags', 'owner_id', 'is_active', 'created_at', 'updated_at'],
+        'tags', 'owner_id', 'is_active', 'created_at', 'updated_at',
+        'owner_name', 'branch_name'],
+      filterable: ['branch_id', 'code', 'name', 'is_customer', 'is_supplier', 'is_employee',
+        'city', 'owner_id', 'is_active', 'tax_no'],
+      sortable: ['name', 'code', 'city', 'created_at', 'updated_at'],
       writable: ['branch_id', 'code', 'name', 'is_company', 'is_customer', 'is_supplier',
         'is_employee', 'tax_office', 'tax_no', 'email', 'phone', 'address', 'district', 'city',
         'postal_code', 'country_code', 'iban', 'payment_term_days', 'credit_limit', 'notes',

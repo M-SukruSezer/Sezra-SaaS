@@ -11,7 +11,7 @@ SGK/bordro) çekirdeğe gömülü.
 | Çekirdek (kiracı, şube, RBAC, RLS, olay veri yolu, denetim izi, onboarding) | ✅ Tamam, testli |
 | CRM & Satış — veri katmanı, iş kuralları, raporlar | ✅ Tamam, testli |
 | CRM — API katmanı | ✅ Tamam, testli |
-| CRM — UI | ⬜ Sırada |
+| CRM — UI (React) | ✅ Tamam, tarayıcıda doğrulandı |
 | Muhasebe & Finans | ⬜ |
 | İnsan Kaynakları & Bordro | ⬜ |
 | Satın Alma | ⬜ |
@@ -70,12 +70,29 @@ rolüyle bağlanmamalıdır** — bağlanırsa RLS bir güvenlik sınırı olmak
 supabase/migrations/   0001-0099 çekirdek, 0100+ modüller, 9999 yetkiler
 supabase/seed/         demo kiracı (Colombia Coffee)
 supabase/tests/        RLS izolasyon ve iş akışı testleri
-core/                  paylaşılan TypeScript katmanı (kimlik, olaylar, API iskeleti)
-modules/{crm,finance,hr,purchasing}/
-apps/api/  apps/web/
+core/                  çekirdek TypeScript katmanı
+                         db.ts        kiracı bağlamlı transaction
+                         resource.ts  genel CRUD üreteci
+                         events.ts    olay işleyici
+                         coreModule   cari, ürün, vergi, kullanıcı uçları
+modules/crm/           CRM API modülü
+apps/api/              Fastify sunucusu (modülleri yükler)
+apps/web/              React arayüzü
 docs/                  mimari kararlar ve modül geliştirme rehberi
 scripts/
 ```
+
+## Arayüz
+
+React + TypeScript, modül başına lazy yüklenebilir sayfalar ve ortak bir
+tasarım sistemi (`apps/web/src/styles.css` — tek token katmanı; modüller kendi
+rengini/aralığını uydurmaz).
+
+Menü, butonlar ve alanlar `/me` ucundan gelen izinlere göre görünür/gizlenir.
+**Bu yalnızca görünürlüktür**: kullanıcı URL'yi elle yazsa bile API ve RLS onu
+durdurur. Yerel geliştirmede giriş ekranından farklı demo kullanıcılara geçip
+aynı ekranın nasıl değiştiği görülebilir — satış temsilcisi 1 fırsat görürken
+şirket yöneticisi 4 görür, raporlar menüsü temsilciye hiç çıkmaz.
 
 ## Oturum bağlamı
 

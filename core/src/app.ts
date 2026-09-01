@@ -15,8 +15,25 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
     genReqId: () => crypto.randomUUID(),
   });
 
+  // İçeriksiz POST'lar (durum geçişi uçları) 400 değil, boş gövdeyle geçmeli
+  app.addContentTypeParser(
+    'application/json', { parseAs: 'string' },
+    (_req, body, done) => {
+      const raw = (body as string).trim();
+      if (raw === '') { done(null, {}); return; }
+      try { done(null, JSON.parse(raw)); } catch (err) { done(err as Error, undefined); }
+    },
+  );
+
   app.setErrorHandler((err, req, reply) => {
-    const appErr = err instanceof AppError ? err : translatePgError(err);
+    // Fastify'ın kendi doğrulama/yönlendirme hataları anlamlı bir durum kodu
+    // taşır; onu 500'e yuvarlamak hata mesajını kaybettirir.
+    const framework = (err as { statusCode?: number }).statusCode;
+    const appErr = err instanceof AppError
+      ? err
+      : (framework && framework < 500
+          ? new AppError(framework, (err as { code?: string }).code ?? 'bad_request', (err as Error).message)
+          : translatePgError(err));
     if (appErr.statusCode >= 500) req.log.error({ err }, 'işlenmemiş hata');
     reply.code(appErr.statusCode).send({
       error: { code: appErr.code, message: appErr.message, details: appErr.details },

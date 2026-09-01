@@ -84,7 +84,7 @@ group by l.tenant_id, l.branch_id, r.id, r.name;
 create or replace view crm.v_pipeline_summary
 with (security_invoker = on) as
 select
-  l.tenant_id,
+  s.tenant_id,
   l.branch_id,
   s.pipeline_id,
   s.id                                        as stage_id,
@@ -95,7 +95,7 @@ select
   coalesce(sum(l.expected_revenue * l.probability / 100.0), 0) as weighted_revenue
 from crm.stages s
 left join crm.leads l on l.stage_id = s.id and l.status = 'open'
-group by l.tenant_id, l.branch_id, s.pipeline_id, s.id, s.name, s.sequence;
+group by s.tenant_id, l.branch_id, s.pipeline_id, s.id, s.name, s.sequence;
 
 -- Gecikmiş aktiviteler (dashboard widget'ı)
 create or replace view crm.v_overdue_activities
