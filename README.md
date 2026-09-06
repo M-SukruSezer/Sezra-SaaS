@@ -275,7 +275,8 @@ ulaşılamıyor" hatası gösterir (sessiz 500 değil).
 |---|---|
 | `scripts/db-reset.sh` | şemayı sıfırdan kurar + demo veriyi yükler |
 | `scripts/test.sh` | veritabanı katmanı testleri (RLS, akış) |
-| `scripts/test-api.sh` | yukarıdakiler + TypeScript derlemesi + API testleri |
+| `scripts/test-api.sh` | yukarıdakiler + tedarik zinciri geçidi + TypeScript derlemesi + API testleri |
+| `scripts/audit.sh` | tedarik zinciri geçidi: `npm audit`, bilinen açık varsa düşer (`npm run audit:gate`) |
 | `scripts/migrate.sh` | yalnızca migration uygular |
 
 ### Roller

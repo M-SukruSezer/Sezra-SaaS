@@ -12,6 +12,7 @@
     "dev": "npm run dev --workspace @sezra/api",
     "build": "tsc --build",
     "typecheck": "tsc --build --force && npm run typecheck --workspace @sezra/web && npm run typecheck --workspace @sezra/pos-client",
+    "audit:gate": "bash scripts/audit.sh",
     "test:db": "bash scripts/test.sh",
     "test:api": "bash scripts/db-reset.sh >/dev/null && node --test --test-concurrency=1 --experimental-strip-types apps/api/test/*.test.ts",
     "migrate": "bash scripts/migrate.sh",
