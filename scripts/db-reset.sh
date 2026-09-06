@@ -5,6 +5,8 @@ cd "$(dirname "$0")/.."
 
 # shellcheck source=scripts/load-env.sh
 source "$(dirname "$0")/load-env.sh"
+# shellcheck source=scripts/db-env.sh
+source "$(dirname "$0")/db-env.sh"
 
 PSQL=(psql -v ON_ERROR_STOP=1 -q)
 [ -n "${DATABASE_URL:-}" ] && PSQL+=(-d "$DATABASE_URL")
