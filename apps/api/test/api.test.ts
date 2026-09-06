@@ -17,6 +17,7 @@ import '../src/env.ts';
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import type { FastifyInstance } from 'fastify';
+import type { Sql } from '@sezra/core';
 
 const USERS = {
   sezra:   '11111111-1111-1111-1111-111111111111',
@@ -28,6 +29,7 @@ const USERS = {
 
 let app: FastifyInstance;
 let closeDb: () => Promise<void>;
+let sql: Sql;
 
 const as = (user: string, extra: Record<string, string> = {}) => ({
   'x-user-id': user, ...extra,
@@ -39,6 +41,7 @@ before(async () => {
   const core = await import('@sezra/core');
   const { modules } = await import('../src/modules.ts');
   closeDb = core.closeDb;
+  sql = core.sql;
   app = await core.createApp({ modules, logger: false });
   await app.ready();
 });
@@ -579,22 +582,52 @@ describe('destek oturumu', () => {
     assert.equal(res.meta.total, 0);
   });
 
-  test('kiracı seçilince YALNIZCA o kiracının verisi görünür', async () => {
+  // TEK FAKTÖR YETMEZ (T-009): platform admini token'ı + destek başlıkları +
+  // kiracı seçimi, tek başına o kiracının verisini AÇMAZ. Canlı bir
+  // core.support_grants kaydı gerekir; yoksa erişim reddedilir.
+  test('canlı destek izni yoksa kiracı seçili olsa da veri görünmez', async () => {
     const me = json(await app.inject({
       method: 'GET', url: '/me', headers: as(USERS.merve) }));
     const tenantId = me.tenant.id as string;
 
+    await sql`delete from core.support_grants where admin_user_id = ${USERS.sezra}`;
+
     const res = json(await app.inject({
       method: 'GET', url: '/crm/leads?limit=100',
       headers: as(USERS.sezra, { 'x-support-mode': 'on', 'x-tenant-id': tenantId }) }));
-    assert.ok(res.meta.total >= 5, `fırsat bekleniyordu, gelen: ${res.meta.total}`);
+    assert.equal(res.meta.total, 0, 'izin yokken destek yolu erişim vermemeli');
 
-    // Her iki kiracıda da hesap planı var; kapsam daralmasaydı iki kiracının
-    // hesapları birden gelirdi.
     const acc = json(await app.inject({
       method: 'GET', url: '/finance/accounts?limit=500',
       headers: as(USERS.sezra, { 'x-support-mode': 'on', 'x-tenant-id': tenantId }) }));
-    assert.equal(acc.meta.total, 63, 'destek oturumu tek kiracıyla sınırlı olmalı');
+    assert.equal(acc.meta.total, 0, 'izin yokken hesap planı da görünmemeli');
+  });
+
+  test('kiracı seçilince VE canlı izin varken YALNIZCA o kiracının verisi görünür', async () => {
+    const me = json(await app.inject({
+      method: 'GET', url: '/me', headers: as(USERS.merve) }));
+    const tenantId = me.tenant.id as string;
+
+    await sql`
+      insert into core.support_grants (admin_user_id, tenant_id, reason, granted_by, expires_at)
+      values (${USERS.sezra}, ${tenantId}, 'DESTEK-API uctan uca testi', ${USERS.sezra},
+              now() + interval '1 hour')`;
+
+    try {
+      const res = json(await app.inject({
+        method: 'GET', url: '/crm/leads?limit=100',
+        headers: as(USERS.sezra, { 'x-support-mode': 'on', 'x-tenant-id': tenantId }) }));
+      assert.ok(res.meta.total >= 5, `fırsat bekleniyordu, gelen: ${res.meta.total}`);
+
+      // Her iki kiracıda da hesap planı var; kapsam daralmasaydı iki kiracının
+      // hesapları birden gelirdi.
+      const acc = json(await app.inject({
+        method: 'GET', url: '/finance/accounts?limit=500',
+        headers: as(USERS.sezra, { 'x-support-mode': 'on', 'x-tenant-id': tenantId }) }));
+      assert.equal(acc.meta.total, 63, 'destek oturumu tek kiracıyla sınırlı olmalı');
+    } finally {
+      await sql`delete from core.support_grants where admin_user_id = ${USERS.sezra}`;
+    }
   });
 });
 

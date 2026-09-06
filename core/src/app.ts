@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import { withContext, sql } from './db.js';
+import { withContext, sql, assertSafeDbRole } from './db.js';
 import { contextFromRequest } from './auth.js';
 import { AppError, translatePgError } from './errors.js';
 import type { SezraModule } from './module.js';
@@ -10,6 +10,10 @@ export interface CreateAppOptions {
 }
 
 export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance> {
+  // İZOLASYON SINIRINI ÖNCE DOĞRULA: etkin DB rolü BYPASSRLS/superuser ise
+  // RLS bir güvenlik sınırı değildir ve sunucu bu hâlde açılmamalıdır.
+  await assertSafeDbRole();
+
   const app = Fastify({
     logger: opts.logger ?? process.env.NODE_ENV !== 'test',
     genReqId: () => crypto.randomUUID(),

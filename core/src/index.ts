@@ -1,4 +1,4 @@
-export { sql, withContext, withSystemContext, closeDb } from './db.js';
+export { sql, withContext, withSystemContext, closeDb, assertSafeDbRole } from './db.js';
 export type { RequestContext, Tx, Sql } from './db.js';
 export { AppError, badRequest, unauthorized, forbidden, notFound, conflict, translatePgError } from './errors.js';
 export { contextFromRequest } from './auth.js';
