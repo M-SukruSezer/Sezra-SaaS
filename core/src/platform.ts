@@ -252,4 +252,58 @@ export function registerPlatformRoutes(app: FastifyInstance): void {
       return { data: row };
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Destek erişim izinleri (T-009 / T-017)
+  // ---------------------------------------------------------------------------
+  //
+  // core.support_grants: bir platform yöneticisine bir kiracı için SÜRELİ,
+  // iptal edilebilir destek erişimi. Yetki kontrolü burada DEĞİL, çağrılan
+  // fonksiyonların ilk satırındaki `platform_guard()` / `is_platform_admin()`
+  // içindedir (42501 -> 403). Listeleme ucu olmadan operatör o an hangi
+  // erişimlerin açık olduğunu göremez; bu yüzden üçü birlikte.
+
+  /** Açık (varsayılan) ya da geçmiş tüm destek izinleri. */
+  app.get('/platform/support-grants', async (req) => {
+    const q = req.query as { include_expired?: string };
+    const includeExpired = q.include_expired === 'true' || q.include_expired === '1';
+    return run(req, async (tx) => ({
+      data: await tx`select * from core.list_support_grants(${includeExpired})`,
+    }));
+  });
+
+  /** Bir yöneticiye bir kiracı için süreli destek erişimi verir. */
+  app.post('/platform/support-grants', async (req, reply) => {
+    const b = (req.body ?? {}) as {
+      admin_user_id?: string; tenant_id?: string; reason?: string; duration_minutes?: number;
+    };
+    if (!b.admin_user_id) throw badRequest('admin_user_id zorunlu');
+    if (!b.tenant_id) throw badRequest('tenant_id zorunlu');
+    if (!b.reason || !b.reason.trim()) throw badRequest('reason zorunlu');
+
+    // Süresiz destek erişimi yok: üst sınır 30 gün, varsayılan 1 saat.
+    const minutes = Number(b.duration_minutes ?? 60);
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 60 * 24 * 30) {
+      throw badRequest('duration_minutes 1 ile 43200 arasında olmalı');
+    }
+
+    const row = await run(req, async (tx) => {
+      const [r] = await tx`
+        select * from core.grant_support_access(
+          ${b.admin_user_id!}, ${b.tenant_id!}, ${b.reason!.trim()},
+          make_interval(mins => ${minutes}))`;
+      return r;
+    });
+    reply.code(201);
+    return { data: row };
+  });
+
+  /** Açık bir destek iznini hemen kapatır (kayıt silinmez, revoked_at damgalanır). */
+  app.delete('/platform/support-grants/:id', async (req) => {
+    const { id } = req.params as { id: string };
+    return run(req, async (tx) => {
+      await tx`select core.revoke_support_access(${id})`;
+      return { data: { id, revoked: true } };
+    });
+  });
 }

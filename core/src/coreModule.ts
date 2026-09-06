@@ -138,6 +138,47 @@ export const coreModule: SezraModule = {
       } catch (err) { throw translatePgError(err); }
     });
 
+    /**
+     * Bekleyen kiracı davetleri — kendi davetlerin.
+     *
+     * Başka bir kiracıda hesabı olan biri davet edildiğinde üyelik BEKLEMEDE
+     * oluşur (migration 1110). Bu uçlar davetlinin KENDİSİ içindir: aktif bir
+     * kiracı bağlamı gerekmez, `core.accept_invite` / `core.decline_invite`
+     * kullanıcıyı `core.current_user_id()` ile sabitler — kimse bir başkası
+     * adına davet kabul/ret edemez.
+     */
+    app.get('/core/invites', async (req) => {
+      const ctx = contextFromRequest(req);
+      try {
+        return await withContext(ctx, async (tx) => {
+          const rows = await tx`select * from core.pending_invites()`;
+          return { data: rows };
+        });
+      } catch (err) { throw translatePgError(err); }
+    });
+
+    app.post('/core/invites/:tenantId/accept', async (req) => {
+      const { tenantId } = req.params as { tenantId: string };
+      const ctx = contextFromRequest(req);
+      try {
+        return await withContext(ctx, async (tx) => {
+          const [row] = await tx`select core.accept_invite(${tenantId}) as membership_id`;
+          return { data: row };
+        });
+      } catch (err) { throw translatePgError(err); }
+    });
+
+    app.post('/core/invites/:tenantId/decline', async (req) => {
+      const { tenantId } = req.params as { tenantId: string };
+      const ctx = contextFromRequest(req);
+      try {
+        return await withContext(ctx, async (tx) => {
+          await tx`select core.decline_invite(${tenantId})`;
+          return { data: { ok: true } };
+        });
+      } catch (err) { throw translatePgError(err); }
+    });
+
     // Kiracının kullanıcıları ve rolleri
     // ========================= Ayarlar =========================
     registerResource(app, {
