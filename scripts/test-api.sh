@@ -25,11 +25,15 @@ bash scripts/audit.sh
 echo
 
 bash scripts/test.sh | tail -3
-npx tsc --build
-echo "✓ TypeScript derlendi"
+# --force sart: API testleri @sezra/core'u DERLENMIS core/dist'ten yukler
+# (package.json main). Bir birlestirme/checkout sonrasi eski dist yerinde
+# kalirsa ve artimli derleme onu guncel sanirsa, testler yeni uclari
+# gormeden 404 verir. --force her kosuda dist'i kaynakla eslesmeye zorlar.
+npx tsc --build --force
+echo "TypeScript derlendi"
 
 bash scripts/db-reset.sh
-echo "✓ veritabanı temiz duruma döndürüldü"
+echo "veritabanı temiz duruma döndürüldü"
 echo
 
 AUTH_MODE=dev NODE_ENV=test node --import tsx --test --test-concurrency=1 apps/api/test/*.test.ts
