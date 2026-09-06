@@ -13,6 +13,9 @@ cd "$(dirname "$0")/.."
 : "${DB_APP_ROLE:=sezra_app}"
 export DATABASE_URL DB_APP_ROLE
 
+bash scripts/audit.sh
+echo
+
 bash scripts/test.sh | tail -3
 npx tsc --build
 echo "✓ TypeScript derlendi"
