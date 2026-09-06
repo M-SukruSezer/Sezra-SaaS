@@ -194,12 +194,25 @@ select public.t_assert(
   'Destek modu açık ama kiracı seçilmemişse hiçbir veri görünmez',
   (select count(*)::text from finance.accounts));
 
--- Kiracı seçilince YALNIZCA o kiracı görünür.
+-- Kiracı seçili AMA bu yöneticiye o kiracı için CANLI bir destek izni yok:
+-- tek faktörlü erişim kapatıldı (1100), kayıt yoksa hiçbir şey görünmez.
 -- Her iki kiracıda da 63 hesap var; koşulsuz baypas olsaydı 126 dönerdi.
 select set_config('app.tenant_id', :'ornek_id', false);
 select public.t_assert(
+  (select count(*) from finance.accounts) = 0,
+  'Destek modu + kiracı seçili ama CANLI İZİN yoksa erişim REDDEDİLİR',
+  (select count(*)::text from finance.accounts));
+select public.t_assert(
+  core.is_support_session() is false,
+  'İzin yokken is_support_session() de false döner');
+
+-- Bir platform yöneticisi (burada Sezra) Örnek Ticaret için süreli izin verir.
+select (core.grant_support_access(
+  '11111111-1111-1111-1111-111111111111'::uuid, :'ornek_id'::uuid,
+  'DESTEK-1001 izolasyon testi', interval '1 hour')).id is not null as granted \gset
+select public.t_assert(
   (select count(*) from finance.accounts) = 63,
-  'Destek modunda YALNIZCA seçilen kiracının verisi görünür',
+  'Canlı destek izniyle YALNIZCA seçilen kiracının verisi görünür',
   (select count(*)::text from finance.accounts));
 
 select public.t_assert(
@@ -207,16 +220,55 @@ select public.t_assert(
   'Destek oturumu kiracılar arası veri sızdırmaz',
   (select count(distinct tenant_id)::text from finance.accounts));
 
--- Seçim değişince görünen veri de değişir: destek erişimi tek kiracıya bağlı.
+-- İzin bir kiracıya özeldir: izinsiz kiracıya geçince erişim kapanır.
 select set_config('app.tenant_id', :'rakip_id', false);
 select public.t_assert(
-  (select count(*) from crm.leads) = 0,
-  'Fırsatı olmayan kiracıya geçilince Örnek Ticaret''nın fırsatları görünmez',
-  (select count(*)::text from crm.leads));
+  (select count(*) from finance.accounts) = 0,
+  'Başka kiracıya (izinsiz) geçilince erişim kapanır',
+  (select count(*)::text from finance.accounts));
 
+-- Rakip Ticaret için de izin verilince onun kendi verisi görünür.
+select (core.grant_support_access(
+  '11111111-1111-1111-1111-111111111111'::uuid, :'rakip_id'::uuid,
+  'DESTEK-1002 izolasyon testi', interval '1 hour')).id is not null as granted2 \gset
 select public.t_assert(
   (select count(*) from finance.accounts) = 63,
-  'Diğer kiracının kendi verisi normal görünür');
+  'İkinci kiracıya izin verilince onun kendi verisi görünür',
+  (select count(*)::text from finance.accounts));
+
+-- SÜRESİ DOLMUŞ izin erişim vermez (owner ile geriye tarihliyoruz).
+reset role;
+update core.support_grants
+   set granted_at = now() - interval '2 minutes',
+       expires_at = now() - interval '1 minute'
+ where admin_user_id = '11111111-1111-1111-1111-111111111111'
+   and tenant_id = :'rakip_id';
+set role sezra_app;
+select public.t_login('11111111-1111-1111-1111-111111111111');
+select set_config('app.support_mode', 'on', false);
+select set_config('app.tenant_id', :'rakip_id', false);
+select public.t_assert(
+  (select count(*) from finance.accounts) = 0,
+  'Süresi dolmuş destek izni erişim vermez',
+  (select count(*)::text from finance.accounts));
+
+-- İPTAL EDİLEN izin erişim vermez.
+select set_config('app.tenant_id', :'ornek_id', false);
+select public.t_assert(
+  (select count(*) from finance.accounts) = 63,
+  'Örnek Ticaret izni hâlâ canlı',
+  (select count(*)::text from finance.accounts));
+select core.revoke_support_access((
+  select id from core.support_grants
+   where admin_user_id = '11111111-1111-1111-1111-111111111111'
+     and tenant_id = :'ornek_id' and revoked_at is null
+   limit 1));
+select public.t_assert(
+  (select count(*) from finance.accounts) = 0,
+  'İptal edilen destek izni erişim vermez',
+  (select count(*)::text from finance.accounts));
+
+select set_config('app.support_mode', 'off', false);
 
 \echo ''
 \echo '=== 11. VERGİ NUMARASI SAĞLAMA TOPLAMI ==='
