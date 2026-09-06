@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fail if any emoji / decorative pictograph appears in UI output, the taste doctrine,
-or the agent's own instruction surface.
+the agent's own instruction surface, the project docs, or the shell scripts.
 
 The kit forbids emoji in product UI (taste/design-taste.md) — this enforces it so it
 can't drift back. It also scans the files the AGENT reads on every run (CLAUDE.md,
@@ -8,8 +8,13 @@ the skills, component/workflow/content/accessibility specs): if those contain em
 the model imitates them and emits emoji-laden output. Keeping the instruction surface
 emoji-free is what actually stops emoji in generated design systems.
 
+The project CLAUDE.md states the zero-emoji rule as ABSOLUTE across every surface, so
+the docs (README.md) and the shell scripts (scripts/*.sh echo output) are scanned too —
+a checkmark in a status table or a tick in test output is the exact drift the rule bans.
+Source, tests and migrations are NOT in the default scan yet; pass them explicitly.
+
 Usage:
-  python3 scripts/check_no_emoji.py                      # examples/ + taste/ + agent files
+  python3 scripts/check_no_emoji.py                      # docs + UI + taste + agent files + scripts
   python3 scripts/check_no_emoji.py path/to/src ...
 Exit 0 = clean, 1 = an emoji/pictograph was found.
 """
@@ -18,19 +23,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# Scan product UI (examples), the taste doctrine, AND the agent's instruction surface —
-# the files the model loads and imitates. README is marketing/branding and is excluded.
+# Scan product UI (examples), the taste doctrine, the agent's instruction surface —
+# the files the model loads and imitates — PLUS the project docs and the shell scripts,
+# because the zero-emoji rule in CLAUDE.md is absolute across every surface.
 DEFAULT = [
     ROOT / "examples", ROOT / "taste",
-    ROOT / "CLAUDE.md", ROOT / "CONTEXT.md",
+    ROOT / "CLAUDE.md", ROOT / "CONTEXT.md", ROOT / "README.md",
     ROOT / ".claude" / "skills", ROOT / ".claude" / "rules", ROOT / ".claude" / "commands",
     ROOT / ".claude" / "agents", ROOT / "evals", ROOT / "templates",
     ROOT / "components", ROOT / "workflows", ROOT / "content",
     ROOT / "accessibility", ROOT / "frameworks",
-    ROOT / "design-systems",
+    ROOT / "design-systems", ROOT / "scripts", ROOT / "docs",
 ]
 EXTS = {".md", ".mdx", ".html", ".htm", ".tsx", ".jsx", ".ts", ".js",
-        ".vue", ".svelte", ".css", ".scss", ".astro", ".json"}
+        ".vue", ".svelte", ".css", ".scss", ".astro", ".json", ".mjs", ".sh"}
+SKIP_DIRS = {"node_modules", "dist", "build", ".git", "coverage"}
 
 # Emoji + dingbat pictographs (check marks, stars, etc.). Deliberately EXCLUDES
 # arrows (U+2190-21FF) and box-drawing, which are legitimate typographic notation.
@@ -50,7 +57,7 @@ def iter_files(paths):
         pp = Path(p)
         if pp.is_dir():
             for f in pp.rglob("*"):
-                if f.suffix in EXTS and "node_modules" not in f.parts:
+                if f.suffix in EXTS and SKIP_DIRS.isdisjoint(f.parts):
                     yield f
         elif pp.is_file():
             yield pp

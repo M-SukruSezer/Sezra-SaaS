@@ -8,20 +8,20 @@ SGK/bordro) çekirdeğe gömülü.
 
 | Katman | Durum |
 |---|---|
-| Çekirdek (kiracı, şube, RBAC, RLS, olay veri yolu, denetim izi, onboarding) | ✅ Tamam, testli |
-| CRM & Satış — veri katmanı, iş kuralları, raporlar | ✅ Tamam, testli |
-| CRM — API katmanı | ✅ Tamam, testli |
-| CRM — UI (React) | ✅ Tamam, tarayıcıda doğrulandı |
-| Muhasebe & Finans | ✅ Tamam, testli (veri + API + UI) |
-| İnsan Kaynakları & Bordro | ✅ Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
-| Satın Alma & Tedarikçi | ✅ Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
-| **Faz 2** — Envanter & Stok | ✅ Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
-| **Faz 2** — Barkod | ✅ Tamam — veri katmanı + UI testli (çoklu barkod, GTIN doğrulama, okutarak sayım); API katmanı çalışır, HTTP testleri şu an ekleniyor |
-| **Faz 2** — Kalite Kontrol | ✅ Tamam — veri katmanı + UI testli (muayene planları, uygunsuzluk, tasarruf); API katmanı çalışır, HTTP testleri şu an ekleniyor |
-| **Faz 2** — Bakım & Ekipman | ✅ Tamam — veri katmanı + UI testli (periyodik plan, iş emri, duruş, güvenilirlik); API katmanı çalışır, HTTP testleri şu an ekleniyor |
-| **Faz 3** — Satış Noktası (POS) | ✅ Tamam — veri katmanı + yönetici UI + **kasiyer istemcisi** testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
-| **Faz 4** — Proje & Zaman Çizelgesi | ✅ Tamam — veri katmanı + UI testli (görev ağacı, hakediş, kârlılık); API katmanı çalışır, HTTP testleri şu an ekleniyor |
-| **Faz 4** — Destek Masası | ✅ Tamam — veri katmanı + UI testli (SLA, yazışma, memnuniyet); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| Çekirdek (kiracı, şube, RBAC, RLS, olay veri yolu, denetim izi, onboarding) | Tamam, testli |
+| CRM & Satış — veri katmanı, iş kuralları, raporlar | Tamam, testli |
+| CRM — API katmanı | Tamam, testli |
+| CRM — UI (React) | Tamam, tarayıcıda doğrulandı |
+| Muhasebe & Finans | Tamam, testli (veri + API + UI) |
+| İnsan Kaynakları & Bordro | Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| Satın Alma & Tedarikçi | Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 2** — Envanter & Stok | Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 2** — Barkod | Tamam — veri katmanı + UI testli (çoklu barkod, GTIN doğrulama, okutarak sayım); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 2** — Kalite Kontrol | Tamam — veri katmanı + UI testli (muayene planları, uygunsuzluk, tasarruf); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 2** — Bakım & Ekipman | Tamam — veri katmanı + UI testli (periyodik plan, iş emri, duruş, güvenilirlik); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 3** — Satış Noktası (POS) | Tamam — veri katmanı + yönetici UI + **kasiyer istemcisi** testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 4** — Proje & Zaman Çizelgesi | Tamam — veri katmanı + UI testli (görev ağacı, hakediş, kârlılık); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 4** — Destek Masası | Tamam — veri katmanı + UI testli (SLA, yazışma, memnuniyet); API katmanı çalışır, HTTP testleri şu an ekleniyor |
 
 **554 otomatik test geçiyor, 0 başarısız** — 443'ü veritabanı katmanında, 12 SQL
 paketine dağılmış (kiracı ve şube izolasyonu, kayıt kuralları, ücret ve maliyet

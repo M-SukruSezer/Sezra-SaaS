@@ -10,7 +10,7 @@ source "$(dirname "$0")/load-env.sh"
 source "$(dirname "$0")/db-env.sh"
 
 bash scripts/db-reset.sh || exit 1
-echo "✓ $(ls supabase/migrations/*.sql | wc -l) migration + demo veri yüklendi"
+echo "$(ls supabase/migrations/*.sql | wc -l) migration + demo veri yüklendi"
 echo
 
 PSQL=(psql -v ON_ERROR_STOP=1 -q)
