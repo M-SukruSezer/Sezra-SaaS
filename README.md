@@ -13,29 +13,30 @@ SGK/bordro) çekirdeğe gömülü.
 | CRM — API katmanı | ✅ Tamam, testli |
 | CRM — UI (React) | ✅ Tamam, tarayıcıda doğrulandı |
 | Muhasebe & Finans | ✅ Tamam, testli (veri + API + UI) |
-| İnsan Kaynakları & Bordro | ✅ Tamam, testli (veri + API + UI) |
-| Satın Alma & Tedarikçi | ✅ Tamam, testli (veri + API + UI) |
-| **Faz 2** — Envanter & Stok | ✅ Tamam, testli (veri + API + UI) |
-| **Faz 2** — Barkod | ✅ Tamam, testli (çoklu barkod, GTIN doğrulama, okutarak sayım) |
-| **Faz 2** — Kalite Kontrol | ✅ Tamam, testli (muayene planları, uygunsuzluk, tasarruf) |
-| **Faz 2** — Bakım & Ekipman | ✅ Tamam, testli (periyodik plan, iş emri, duruş, güvenilirlik) |
-| **Faz 3** — Satış Noktası (POS) | ✅ Tamam: veri + API + yönetici UI + **kasiyer istemcisi** |
-| **Faz 4** — Proje & Zaman Çizelgesi | ✅ Tamam, testli (görev ağacı, hakediş, kârlılık) |
-| **Faz 4** — Destek Masası | ✅ Tamam, testli (SLA, yazışma, memnuniyet) |
+| İnsan Kaynakları & Bordro | ✅ Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| Satın Alma & Tedarikçi | ✅ Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 2** — Envanter & Stok | ✅ Tamam — veri katmanı + UI testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 2** — Barkod | ✅ Tamam — veri katmanı + UI testli (çoklu barkod, GTIN doğrulama, okutarak sayım); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 2** — Kalite Kontrol | ✅ Tamam — veri katmanı + UI testli (muayene planları, uygunsuzluk, tasarruf); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 2** — Bakım & Ekipman | ✅ Tamam — veri katmanı + UI testli (periyodik plan, iş emri, duruş, güvenilirlik); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 3** — Satış Noktası (POS) | ✅ Tamam — veri katmanı + yönetici UI + **kasiyer istemcisi** testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 4** — Proje & Zaman Çizelgesi | ✅ Tamam — veri katmanı + UI testli (görev ağacı, hakediş, kârlılık); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Faz 4** — Destek Masası | ✅ Tamam — veri katmanı + UI testli (SLA, yazışma, memnuniyet); API katmanı çalışır, HTTP testleri şu an ekleniyor |
 
-**394 otomatik test geçiyor** — 348'i veritabanı katmanında (kiracı ve şube
-izolasyonu, kayıt kuralları, ücret ve maliyet gizliliği, modül aktivasyonu,
-KDV/tevkifat, çift taraflı kayıt, muhasebe değişmezliği, kapalı dönem, bordro
-hesabı, kademeli tedarikçi fiyatı, kısmi mal kabul, hareketli ortalama maliyet,
-negatif stok engeli, FEFO, olay yayını, denetim izi), 46'sı API katmanında
-(aynı izolasyonun HTTP üzerinden de geçerli olduğunu ve uçtan uca akışın
-çalıştığını doğrular).
+**554 otomatik test geçiyor, 0 başarısız** — 443'ü veritabanı katmanında, 12 SQL
+paketine dağılmış (kiracı ve şube izolasyonu, kayıt kuralları, ücret ve maliyet
+gizliliği, modül aktivasyonu, KDV/tevkifat, çift taraflı kayıt, muhasebe
+değişmezliği, kapalı dönem, bordro hesabı, kademeli tedarikçi fiyatı, kısmi mal
+kabul, hareketli ortalama maliyet, negatif stok engeli, FEFO, olay yayını,
+denetim izi), 111'i API katmanında (çekirdek, CRM, Muhasebe, SMS, çek/senet,
+müşteri portalı — aynı izolasyonun HTTP üzerinden de geçerli olduğunu ve uçtan
+uca akışın çalıştığını doğrular).
 
 **Faz 1 tamamlandı**: CRM & Satış, Muhasebe & Finans, İnsan Kaynakları & Bordro,
 Satın Alma & Tedarikçi.
 **Faz 2 tamamlandı**: Envanter & Stok, Barkod, Kalite Kontrol, Bakım & Ekipman.
 **Faz 3 tamamlandı**: Satış Noktası (POS).
-**Faz 4 başladı**: Proje & Zaman Çizelgesi.
+**Faz 4 tamamlandı**: Proje & Zaman Çizelgesi, Destek Masası.
 
 ### Uçtan uca çalışan akış
 
@@ -302,6 +303,7 @@ core/                  çekirdek TypeScript katmanı
                          events.ts    olay işleyici
                          coreModule   cari, ürün, vergi, kullanıcı uçları
 modules/crm/           CRM API modülü
+modules/finance/       Muhasebe & Finans API modülü
 modules/hr/            İK & Bordro API modülü
 modules/purchasing/    Satın Alma API modülü
 modules/inventory/     Envanter & Stok API modülü
