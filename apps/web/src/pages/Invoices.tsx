@@ -1,73 +1,127 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { useItem, useList } from '../ui/useResource';
-import { Card, Empty, ErrorBox, PageHead, SearchInput, StatusBadge, Toolbar } from '../ui';
+import { useItem } from '../ui/useResource';
+import { Coins, Landmark, Percent, ReceiptText, Wallet } from 'lucide-react';
+import { Card, Empty, ErrorBox, PageHead, Stat, StatusBadge } from '../ui';
+import { ResourceList, type Kolon } from '../ui/ResourceList';
+import {
+  DURUM_FATURA, kolonAd, kolonBelgeNo, kolonCari, kolonDurum, kolonPara,
+  kolonSayi, kolonTarih,
+} from '../ui/kolonlar';
 import { money, date, num } from '../i18n';
 import { useSession } from '../api/session';
 import type { Invoice } from '../api/types';
 
+/**
+ * Fatura listesi (satış / alış).
+ *
+ * BAŞ RAKAM TAHSİL EDİLMEMİŞ BAKİYEDİR. Fatura ekranına bakan kişi "ne kadar
+ * kesildi"yi değil "ne kadar gelmedi"yi arar; ciro zaten gösterge panelinde
+ * durur.
+ *
+ * VADESİ GEÇEN AYRI BİR GÖSTERGE: bakiyenin içinde eriyince kimse fark
+ * etmiyor. Tarih karşılaştırması gün başına yuvarlanır, aksi hâlde bugün
+ * vadesi dolan fatura saate göre bazen gecikmiş görünürdü.
+ */
 export function InvoiceList({ kind }: { kind: 'sale' | 'purchase' }) {
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState('');
-  const list = useList<Invoice>('/finance/invoices', {
-    kind, q, status: status || undefined, limit: 100,
-  });
+  const satis = kind === 'sale';
+  const baslik = satis ? 'Satış Faturaları' : 'Alış Faturaları';
+  const bugun = new Date(); bugun.setHours(0, 0, 0, 0);
+  const gecikmis = (i: Invoice) =>
+    Number(i.balance_due) > 0 && i.due_date != null && new Date(i.due_date) < bugun;
+  const topla = (xs: Invoice[], alan: 'total' | 'balance_due') =>
+    xs.reduce((t, i) => t + Number(i[alan] || 0), 0);
+
+  const kolonlar: Kolon<Invoice>[] = [
+    kolonBelgeNo<Invoice>('No'),
+    kolonCari<Invoice>(),
+    kolonTarih<Invoice>('issue_date', 'Tarih'),
+    {
+      anahtar: 'due_date', baslik: 'Vade', sirala: true,
+      // GECİKME RENKLE DEĞİL, KELİMEYLE de söylenir: "gecikti" yazmasaydı
+      // bilgi yalnızca kırmızıda kalır ve renk körlüğünde kaybolurdu.
+      govde: (i) => (gecikmis(i)
+        ? <span className="badge badge-danger">{date(i.due_date)} · gecikti</span>
+        : date(i.due_date)),
+      disa: (i) => i.due_date ?? '',
+    },
+    kolonDurum<Invoice>(DURUM_FATURA),
+    kolonPara<Invoice>('subtotal', 'Matrah'),
+    kolonPara<Invoice>('tax_total', 'KDV'),
+    kolonPara<Invoice>('withholding_total', 'Tevkifat', { gizli: true }),
+    kolonPara<Invoice>('total', 'Toplam', { kalin: true }),
+    {
+      anahtar: 'balance_due', baslik: 'Kalan', hizala: 'sag',
+      govde: (i) => (Number(i.balance_due) > 0
+        ? money(i.balance_due, i.currency)
+        : <span className="muted">—</span>),
+      disa: (i) => i.balance_due,
+    },
+    {
+      anahtar: 'einvoice_status', baslik: 'e-Fatura', gruplanir: true,
+      govde: (i) => (i.einvoice_status
+        ? <StatusBadge status={i.einvoice_status} />
+        : <span className="muted">—</span>),
+      disa: (i) => i.einvoice_status ?? '',
+    },
+    kolonSayi<Invoice>('line_count', 'Kalem', { basamak: 0, gizli: true }),
+    kolonAd<Invoice>('owner_name', 'Sahibi', { gizli: true }),
+  ];
 
   return (
-    <>
-      <PageHead
-        title={kind === 'sale' ? 'Satış Faturaları' : 'Alış Faturaları'}
-        subtitle={`${list.total} kayıt`}
-      />
-      <Toolbar>
-        <SearchInput value={q} onChange={setQ} placeholder="Fatura no, cari, not…" />
-        <select style={{ width: 'auto' }} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Tüm durumlar</option>
-          <option value="draft">Taslak</option>
-          <option value="posted">Muhasebeleşti</option>
-          <option value="partially_paid">Kısmen ödendi</option>
-          <option value="paid">Ödendi</option>
-          <option value="cancelled">İptal</option>
-        </select>
-      </Toolbar>
-      <ErrorBox error={list.error} />
-
-      <Card padded={false}>
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>No</th><th>Cari</th><th>Tarih</th><th>Vade</th><th>Durum</th>
-                <th className="r">Matrah</th><th className="r">KDV</th>
-                <th className="r">Toplam</th><th className="r">Kalan</th><th>e-Fatura</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.data.map((i) => (
-                <tr key={i.id}>
-                  <td><Link to={`/finance/${kind === 'sale' ? 'sales' : 'purchases'}/${i.id}`}>
-                    <strong>{i.number ?? 'Taslak'}</strong></Link></td>
-                  <td>{i.partner_name ?? '—'}</td>
-                  <td>{date(i.issue_date)}</td>
-                  <td>{date(i.due_date)}</td>
-                  <td><StatusBadge status={i.status} /></td>
-                  <td className="r">{money(i.subtotal, i.currency)}</td>
-                  <td className="r">{money(i.tax_total, i.currency)}</td>
-                  <td className="r"><strong>{money(i.total, i.currency)}</strong></td>
-                  <td className="r">{Number(i.balance_due) > 0
-                    ? money(i.balance_due, i.currency) : <span className="muted">—</span>}</td>
-                  <td>{i.einvoice_status
-                    ? <span className="badge badge-info">{i.einvoice_status}</span>
-                    : <span className="muted">—</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!list.loading && list.data.length === 0 && <Empty />}
-        </div>
-      </Card>
-    </>
+    <ResourceList<Invoice>
+      kicker={satis ? 'Muhasebe · Satış Faturaları' : 'Muhasebe · Alış Faturaları'}
+      baslik={baslik}
+      altBaslik={satis
+        ? 'Kesilen faturalar, tahsilat durumu ve e-Fatura akıbeti.'
+        : 'Gelen faturalar, ödeme durumu ve muhasebeleşme.'}
+      yol="/finance/invoices"
+      sabitSuzgec={{ kind }}
+      aramaYer="Fatura no, cari, not…"
+      varsayilanSirala={{ kolon: 'issue_date', yon: 'desc' }}
+      kolonlar={kolonlar}
+      satirYolu={(i) => `/finance/${satis ? 'sales' : 'purchases'}/${i.id}`}
+      yazmaIzni="finance.invoice.create"
+      silmeIzni="finance.invoice.delete.all"
+      yetenekler={[
+        { simge: ReceiptText, etiket: 'e-Fatura', deger: 'UBL-TR 1.2' },
+        { simge: Percent, etiket: 'KDV', deger: 'Oran ve tevkifat' },
+        { simge: Coins, etiket: 'Çoklu para', deger: 'Kur belgede donar' },
+        { simge: Landmark, etiket: 'Muhasebe', deger: 'Yevmiye kaydı üretir' },
+        { simge: Wallet, etiket: 'Tahsilat', deger: 'Kısmi ödeme izlenir' },
+      ]}
+      sayimlar={(t, rows) => [
+        { deger: t, etiket: 'fatura' },
+        { deger: rows.filter((i) => Number(i.balance_due) > 0).length, etiket: 'açık' },
+        { deger: money(topla(rows.filter((i) => Number(i.balance_due) > 0), 'balance_due'),
+                       rows[0]?.currency ?? 'TRY'), etiket: 'bakiye' },
+      ]}
+      gostergeler={(rows) => {
+        if (rows.length === 0) return null;
+        const pb = rows[0]?.currency ?? 'TRY';
+        const acik = rows.filter((i) => Number(i.balance_due) > 0);
+        const geciken = acik.filter(gecikmis);
+        const taslak = rows.filter((i) => i.status === 'draft');
+        return (
+          <div className="grid grid-4">
+            <Stat label="Tahsil edilmemiş bakiye" value={money(topla(acik, 'balance_due'), pb)}
+                  hint={`${acik.length} açık fatura`} />
+            <Stat label="Vadesi geçen" value={money(topla(geciken, 'balance_due'), pb)}
+                  hint={geciken.length === 0 ? 'Geciken fatura yok' : `${geciken.length} fatura`} />
+            <Stat label="Listelenen toplam" value={money(topla(rows, 'total'), pb)}
+                  hint={`${rows.length} fatura`} />
+            <Stat label="Taslak" value={taslak.length}
+                  hint={taslak.length === 0 ? 'Bekleyen taslak yok' : 'Muhasebeleşmeyi bekliyor'} />
+          </div>
+        );
+      }}
+      bosBaslik="Henüz fatura yok"
+      bosMetin={satis
+        ? 'Onaylanan bir satış siparişi otomatik olarak fatura taslağı üretir. İlk fatura kesildiğinde matrahı, KDV\'si ve tahsilat durumu burada görünür.'
+        : 'Mal kabulü onaylanan bir satın alma siparişi alış faturası taslağı üretir. İlk fatura girildiğinde burada listelenir.'}
+      dipnot={<span>Muhasebeleşen fatura yevmiye kaydı üretir ve kalemleri kilitlenir.</span>}
+    />
   );
 }
 

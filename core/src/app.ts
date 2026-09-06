@@ -54,13 +54,23 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
   app.get('/me', async (req) => {
     const ctx = contextFromRequest(req);
     return withContext(ctx, async (tx) => {
+      // PROFİL SATIRI OLMAYABİLİR: kimlik sağlayıcısında hesabını açmış ama
+      // henüz hiçbir kiracıya bağlanmamış kişi (portal daveti bekleyen
+      // müşteri) bu durumdadır. Satır bulunamadığında alanı hiç yazmamak,
+      // `user` anahtarını yanıttan sessizce düşürüyordu: istemci tipe göre
+      // `user.email` okuyup çöküyordu. Eksikliği AÇIKÇA söylemek gerekir.
       const [user] = await tx`
-        select id, email, full_name, locale, timezone, is_platform_admin
+        select id, email, full_name, phone, avatar_url, locale, timezone, is_platform_admin
         from core.users where id = ${ctx.userId}`;
 
+      // Destek oturumunda platform yöneticisinin ÜYELİĞİ yoktur, dolayısıyla
+      // current_tenant_id() null döner. Bu durumda erişilen kiracıyı
+      // support_tenant_id() söyler. Aksi hâlde arayüz kiracı verisini gösterir
+      // ama kimin verisi olduğunu yazamaz; destek modunun en tehlikeli hâli budur.
       const [tenant] = await tx`
         select t.id, t.name, t.slug, t.currency, t.locale, t.timezone
-        from core.tenants t where t.id = core.current_tenant_id()`;
+        from core.tenants t
+        where t.id = coalesce(core.current_tenant_id(), core.support_tenant_id())`;
 
       const memberships = await tx`
         select t.id as tenant_id, t.name, t.slug, m.is_default
@@ -76,7 +86,8 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
       const modules = await tx`
         select m.code, m.name from core.modules m
         join core.tenant_modules tm on tm.module_code = m.code
-        where tm.tenant_id = core.current_tenant_id() and tm.enabled
+        where tm.tenant_id = coalesce(core.current_tenant_id(), core.support_tenant_id())
+          and tm.enabled
         order by m.phase, m.name`;
 
       const roles = await tx`
@@ -84,15 +95,35 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
         join core.roles r on r.id = mr.role_id
         where mr.membership_id = core.current_membership_id()`;
 
+      const [support] = await tx`select core.support_tenant_id() is not null as active`;
+
+      // PORTAL OTURUMU AYRI BİR ARAYÜZDÜR. Portal kullanıcısının hiçbir izni
+      // ve hiçbir modülü yoktur; personel kabuğu ona boş bir menü ve her
+      // yerde "yetkiniz yok" gösterirdi. Kimin adına girildiğini de sunucu
+      // söyler: firma adını istemcinin çıkarmasına bırakmak, yanlış firmanın
+      // başlıkta yazması riskini taşır.
+      const [portal] = await tx`
+        select p.id as partner_id, p.name as partner_name, p.code as partner_code
+        from core.partners p
+        where p.id = core.current_portal_partner_id()`;
+
+      // PORTAL OTURUMUNA İŞLETME YAPISI GİTMEZ. Şube adları ve açık modül
+      // listesi müşterinin işine yaramaz ama satıcının iç yapısını anlatır:
+      // kaç şubesi var, hangi modülleri kullanıyor. Portal kabuğu ikisini de
+      // kullanmıyor; göndermemek hem doğru hem bedava.
+      const portalOturumu = portal != null;
+
       return {
-        user,
+        user: user ?? null,
         tenant: tenant ?? null,
+        support_session: (support as { active: boolean } | undefined)?.active ?? false,
         memberships,
-        branches,
+        branches: portalOturumu ? [] : branches,
         roles,
-        modules,
+        modules: portalOturumu ? [] : modules,
         permissions: (perms?.codes as string[] | null) ?? [],
         supportMode: ctx.supportMode === true,
+        portal: portal ?? null,
       };
     });
   });

@@ -72,6 +72,45 @@ as $$
      and core.is_platform_admin();
 $$;
 
+-- Destek oturumunda ERİŞİLEN kiracı.
+--
+-- is_support_session() yalnızca "destek modundayım" der; hangi kiracıya
+-- bakıldığını söylemez. Politikalarda koşulsuz baypas olarak kullanılırsa
+-- platform yöneticisi TÜM kiracıların verisini birden görür: yanlışlıkla başka
+-- müşterinin verisine bakmak mümkün olur ve denetim izi ziyareti tek bir
+-- kiracıya atfedip yanıltır.
+--
+-- Bu fonksiyon seçilen kiracıyı döndürür; seçilmemişse ya da kiracı yoksa NULL
+-- döner. Politikalarda `tenant_id = support_tenant_id()` biçiminde kullanılır,
+-- yani NULL durumunda karşılaştırma false olur ve HİÇBİR ŞEY görünmez.
+-- Güvenli varsayılan budur: destek erişimi bilinçli bir seçim gerektirir.
+create or replace function core.support_tenant_id()
+returns uuid
+language plpgsql
+stable
+security definer
+set search_path = core, pg_temp
+as $$
+declare v uuid;
+begin
+  if not core.is_support_session() then
+    return null;
+  end if;
+  begin
+    v := nullif(current_setting('app.tenant_id', true), '')::uuid;
+  exception when others then
+    return null;
+  end;
+  if v is null then
+    return null;
+  end if;
+  if not exists (select 1 from core.tenants t where t.id = v and t.deleted_at is null) then
+    return null;
+  end if;
+  return v;
+end;
+$$;
+
 -- -----------------------------------------------------------------------------
 -- Aktif kiracı
 -- -----------------------------------------------------------------------------
@@ -243,6 +282,16 @@ begin
 end;
 $$;
 
+-- TETİKLEYİCİ ADI `trg_00_` İLE BAŞLAR — bu bir süs değil, ZORUNLULUKTUR.
+--
+-- PostgreSQL, aynı olaydaki BEFORE tetikleyicilerini AD SIRASINA göre çalıştırır.
+-- Bu tetikleyici tenant_id/owner_id/created_by alanlarını dolduruyor; modüllerin
+-- kendi hesaplama tetikleyicileri ondan SONRA çalışmazsa `new.tenant_id` NULL
+-- görürler ve sessizce yanlış hesap yaparlar (ör. kiracıya bağlı bir parametreyi
+-- bulamayıp sıfır dönerler — hata vermeden).
+--
+-- `00` öneki, modül tetikleyicileri hangi adı alırsa alsın bu tetikleyicinin ilk
+-- sırada kalmasını garanti eder.
 create or replace function core.attach_row_defaults(p_schema text, p_table text)
 returns void
 language plpgsql
@@ -250,7 +299,8 @@ as $$
 begin
   execute format(
     'drop trigger if exists trg_%1$s_row_defaults on %2$I.%1$I;
-     create trigger trg_%1$s_row_defaults before insert or update on %2$I.%1$I
+     drop trigger if exists trg_00_%1$s_row_defaults on %2$I.%1$I;
+     create trigger trg_00_%1$s_row_defaults before insert or update on %2$I.%1$I
        for each row execute function core.fn_set_row_defaults();',
     p_table, p_schema
   );

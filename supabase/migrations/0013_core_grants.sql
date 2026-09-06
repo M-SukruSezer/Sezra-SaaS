@@ -32,8 +32,18 @@ begin
     v_roles := v_roles || 'authenticated';
   end if;
 
+  -- Şema listesi ELLE SAYILMAZ: core.modules'a kayıtlı her modülün kendi adıyla
+  -- bir şeması varsa yetkiler ona da verilir. Elle liste tutulsaydı yeni bir
+  -- modül eklendiğinde tabloları sessizce erişilemez kalırdı — ve bu, RLS
+  -- hatası gibi görünen ama aslında yetki eksiği olan bir hata sınıfı üretirdi.
   foreach v_role in array v_roles loop
-    foreach v_schema in array array['core', 'crm', 'finance', 'hr', 'purchasing'] loop
+    for v_schema in
+      select n.nspname
+      from pg_namespace n
+      where n.nspname = 'core'
+         or n.nspname in (select code from core.modules)
+      order by n.nspname
+    loop
       execute format('grant usage on schema %I to %I', v_schema, v_role);
       execute format('grant select, insert, update, delete on all tables in schema %I to %I', v_schema, v_role);
       execute format('grant usage, select on all sequences in schema %I to %I', v_schema, v_role);
@@ -48,11 +58,24 @@ begin
     end loop;
   end loop;
 
-  -- Denetim izi hiç kimse tarafından değiştirilemez (RLS'e ek olarak tablo yetkisi de kapalı)
+  -- TÜRETİLMİŞ ve DENETİM tabloları uygulama rolünce yazılamaz.
+  -- Bunlar RLS'e EK bir katmandır: RLS "hangi satırı" görebileceğini, buradaki
+  -- yetki kısıtı "hiç yazamaz"ı söyler. Türetilmiş tabloların tek meşru yazma
+  -- yolu security definer fonksiyonlardır (ör. inventory.adjust_quant) ve onlar
+  -- sahip rolüyle çalıştığı için bu kısıttan etkilenmez.
+  --
+  -- Liste var olmayan tabloyu atlar: modüller farklı fazlarda ekleniyor ve
+  -- apply_grants her migration turunda yeniden çalışıyor.
   foreach v_role in array v_roles loop
-    execute format('revoke insert, update, delete on core.audit_log from %I', v_role);
-    execute format('revoke insert, update, delete on core.events, core.event_deliveries from %I', v_role);
-    execute format('revoke insert, update, delete on core.plans, core.modules, core.permissions, core.plan_modules from %I', v_role);
+    foreach v_schema in array array[
+      'core.audit_log', 'core.events', 'core.event_deliveries',
+      'core.plans', 'core.modules', 'core.permissions', 'core.plan_modules',
+      'inventory.quants', 'inventory.product_costs'
+    ] loop
+      if to_regclass(v_schema) is not null then
+        execute format('revoke insert, update, delete on %s from %I', v_schema, v_role);
+      end if;
+    end loop;
   end loop;
 end;
 $$;

@@ -93,7 +93,7 @@ alter table core.audit_log force row level security;
 drop policy if exists p_audit_log_select on core.audit_log;
 create policy p_audit_log_select on core.audit_log for select
   using (
-    (select core.is_support_session())
+    tenant_id = (select core.support_tenant_id())
     or (tenant_id = (select core.current_tenant_id())
         and (select core.has_perm('core.audit.read.all')))
   );
@@ -148,14 +148,20 @@ create table if not exists core.sequences (
 create unique index if not exists ux_sequences_scope
   on core.sequences (tenant_id, coalesce(branch_id, '00000000-0000-0000-0000-000000000000'::uuid), code);
 
-create or replace function core.next_sequence(p_code text, p_branch_id uuid default null)
+-- p_tenant_id: normalde oturumdan çözülür. ARKA PLAN İŞLERİ (olay işleyici,
+-- cron) kullanıcı bağlamı olmadan çalıştığı için kiracıyı açıkça geçebilmelidir;
+-- aksi hâlde bir handler belge numarası üretemez ve "aktif kiracı bulunamadı"
+-- ile düşer.
+create or replace function core.next_sequence(
+  p_code text, p_branch_id uuid default null, p_tenant_id uuid default null
+)
 returns text
 language plpgsql
 security definer
 set search_path = core, pg_temp
 as $$
 declare
-  v_tenant     uuid := core.current_tenant_id();
+  v_tenant     uuid := coalesce(p_tenant_id, core.current_tenant_id());
   v_seq        core.sequences;
   v_period_key text;
   v_value      bigint;

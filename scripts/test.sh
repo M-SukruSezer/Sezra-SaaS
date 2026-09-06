@@ -4,6 +4,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+# shellcheck source=scripts/load-env.sh
+source "$(dirname "$0")/load-env.sh"
+
 bash scripts/db-reset.sh || exit 1
 echo "✓ $(ls supabase/migrations/*.sql | wc -l) migration + demo veri yüklendi"
 echo

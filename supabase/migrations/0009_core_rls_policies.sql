@@ -59,7 +59,7 @@ begin
     execute format('alter table core.%I force row level security', t);
     execute format('drop policy if exists p_%s_select on core.%I', t, t);
     execute format($p$create policy p_%1$s_select on core.%1$I for select
-      using ((select core.is_support_session()) or tenant_id = (select core.current_tenant_id()))$p$, t);
+      using (tenant_id = (select core.support_tenant_id()) or tenant_id = (select core.current_tenant_id()))$p$, t);
     execute format('drop policy if exists p_%s_write on core.%I', t, t);
     execute format($p$create policy p_%1$s_write on core.%1$I for all
       using (core.is_platform_admin()
@@ -78,7 +78,7 @@ alter table core.branches force row level security;
 drop policy if exists p_branches_select on core.branches;
 create policy p_branches_select on core.branches for select
   using (
-    (select core.is_support_session())
+    tenant_id = (select core.support_tenant_id())
     or (tenant_id = (select core.current_tenant_id())
         and (select core.accessible_branch_ids()) @> array[id])
   );
@@ -223,7 +223,7 @@ alter table core.sequences enable row level security;
 alter table core.sequences force row level security;
 drop policy if exists p_sequences_select on core.sequences;
 create policy p_sequences_select on core.sequences for select
-  using ((select core.is_support_session()) or tenant_id = (select core.current_tenant_id()));
+  using (tenant_id = (select core.support_tenant_id()) or tenant_id = (select core.current_tenant_id()));
 drop policy if exists p_sequences_write on core.sequences;
 create policy p_sequences_write on core.sequences for all
   using (tenant_id = (select core.current_tenant_id()) and (select core.has_perm('core.tenant.write.all')))

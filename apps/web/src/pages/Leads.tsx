@@ -1,64 +1,138 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useItem, useList } from '../ui/useResource';
-import { Card, Empty, ErrorBox, Field, PageHead, SearchInput, StatusBadge, Toolbar } from '../ui';
-import { money, date } from '../i18n';
+import { Coins, FileClock, Target, UserRound, Workflow } from 'lucide-react';
+import { Card, ErrorBox, Field, PageHead, Stat, StatusBadge } from '../ui';
+import { ResourceList, type Kolon } from '../ui/ResourceList';
+import { gecenSure, money, date, tamZaman } from '../i18n';
 import { useSession } from '../api/session';
 import type { Board, Lead, LostReason, Partner, Stage } from '../api/types';
 
+/**
+ * Fırsat listesi.
+ *
+ * Kabuk `ResourceList`ten gelir; burada kalan yalnızca CRM'e ait olan şey.
+ *
+ * BAŞ RAKAM BEKLENEN CİRODUR: satış ekibinin gün içinde tek baktığı sayı
+ * odur, tabloya inmeden görünür. Göstergeler LİSTEDEKİ kayıtlardan
+ * hesaplanır, kiracının tamamından değil -- süzgeç daraldığında rakamların
+ * da daralması gerekir, aksi hâlde bant tablonun gösterdiğinden başka bir
+ * şey söyler.
+ */
 export function LeadList() {
   const { me, can } = useSession();
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState('');
-  const leads = useList<Lead>('/crm/leads', { q, status: status || undefined, limit: 100 });
   const currency = me?.tenant?.currency ?? 'TRY';
 
-  return (
-    <>
-      <PageHead
-        title="Fırsatlar"
-        subtitle={`${leads.total} kayıt`}
-        actions={can('crm.lead.create')
-          ? <Link className="btn btn-primary" to="/crm/leads/yeni">Yeni fırsat</Link> : null}
-      />
-      <Toolbar>
-        <SearchInput value={q} onChange={setQ} placeholder="Fırsat, kişi, e-posta…" />
-        <select style={{ width: 'auto' }} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Tüm durumlar</option>
-          <option value="open">Açık</option>
-          <option value="won">Kazanıldı</option>
-          <option value="lost">Kaybedildi</option>
-        </select>
-      </Toolbar>
-      <ErrorBox error={leads.error} />
+  const yeniButon = can('crm.lead.create')
+    ? <Link className="btn btn-primary" to="/crm/leads/yeni">Yeni fırsat</Link> : null;
 
-      <Card padded={false}>
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Fırsat</th><th>Kişi</th><th>Durum</th>
-                <th className="r">Beklenen ciro</th><th className="r">Olasılık</th><th>Kapanış</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.data.map((l) => (
-                <tr key={l.id} style={{ cursor: 'pointer' }}>
-                  <td><Link to={`/crm/leads/${l.id}`}><strong>{l.name}</strong></Link></td>
-                  <td className="muted">{l.contact_name ?? '—'}</td>
-                  <td><StatusBadge status={l.status} /></td>
-                  <td className="r">{money(l.expected_revenue, l.currency || currency)}</td>
-                  <td className="r">%{l.probability}</td>
-                  <td>{date(l.expected_close_date)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!leads.loading && leads.data.length === 0 && <Empty />}
-        </div>
-      </Card>
-    </>
+  const kolonlar: Kolon<Lead>[] = [
+    {
+      anahtar: 'name', baslik: 'Fırsat', sirala: true, suz: 'metin',
+      govde: (l) => <strong>{l.name}</strong>, disa: (l) => l.name,
+    },
+    {
+      anahtar: 'partner_name', baslik: 'Cari',
+      govde: (l) => l.partner_name ?? <span className="muted">—</span>,
+      disa: (l) => l.partner_name ?? '',
+    },
+    {
+      anahtar: 'contact_name', baslik: 'Kişi',
+      govde: (l) => <span className="muted">{l.contact_name ?? '—'}</span>,
+      disa: (l) => l.contact_name ?? '',
+    },
+    {
+      anahtar: 'stage_name', baslik: 'Aşama', gruplanir: true,
+      govde: (l) => l.stage_name ?? <span className="muted">—</span>,
+      disa: (l) => l.stage_name ?? '',
+    },
+    {
+      anahtar: 'status', baslik: 'Durum', suz: 'secim', sirala: true, gruplanir: true,
+      secenekler: [
+        { deger: 'open', etiket: 'Açık' },
+        { deger: 'won', etiket: 'Kazanıldı' },
+        { deger: 'lost', etiket: 'Kaybedildi' },
+      ],
+      govde: (l) => <StatusBadge status={l.status} />,
+      disa: (l) => l.status,
+    },
+    {
+      anahtar: 'expected_revenue', baslik: 'Beklenen ciro', hizala: 'sag', sirala: true,
+      govde: (l) => money(l.expected_revenue, l.currency || currency),
+      disa: (l) => l.expected_revenue,
+    },
+    {
+      anahtar: 'probability', baslik: 'Olasılık', hizala: 'sag', sirala: true,
+      govde: (l) => <>%{l.probability}</>, disa: (l) => l.probability,
+    },
+    {
+      anahtar: 'expected_close_date', baslik: 'Kapanış', sirala: true,
+      govde: (l) => date(l.expected_close_date), disa: (l) => l.expected_close_date ?? '',
+    },
+    {
+      anahtar: 'owner_name', baslik: 'Sahibi', gruplanir: true,
+      govde: (l) => l.owner_name ?? <span className="muted">—</span>,
+      disa: (l) => l.owner_name ?? '',
+    },
+    {
+      anahtar: 'updated_at', baslik: 'Güncelleme', sirala: true, hizala: 'sag',
+      govde: (l) => <span className="muted" title={tamZaman(l.updated_at)}>{gecenSure(l.updated_at)}</span>,
+      disa: (l) => l.updated_at,
+    },
+  ];
+
+  const toplam = (xs: Lead[]) => xs.reduce((t, l) => t + Number(l.expected_revenue || 0), 0);
+
+  return (
+    <ResourceList<Lead>
+      kicker="CRM · Fırsatlar"
+      baslik="Fırsatlar"
+      altBaslik="Açık satış hattı, sahibi ve beklenen kapanışı."
+      yol="/crm/leads"
+      aramaYer="Fırsat, kişi, e-posta, telefon…"
+      varsayilanSirala={{ kolon: 'updated_at', yon: 'desc' }}
+      kolonlar={kolonlar}
+      satirYolu={(l) => `/crm/leads/${l.id}`}
+      yazmaIzni="crm.lead.create"
+      silmeIzni="crm.lead.delete.all"
+      yazilabilir={['name', 'contact_name', 'email', 'phone', 'source',
+        'expected_revenue', 'currency', 'priority', 'expected_close_date', 'notes']}
+      sayimlar={(t, satirlar) => [
+        { deger: t, etiket: 'fırsat' },
+        { deger: satirlar.filter((l) => l.status === 'open').length, etiket: 'açık' },
+        { deger: money(toplam(satirlar.filter((l) => l.status === 'open')), currency), etiket: 'açık hatta' },
+      ]}
+      yetenekler={[
+        { simge: Workflow, etiket: 'Hat', deger: 'Aşamalı satış hattı' },
+        { simge: Target, etiket: 'Olasılık', deger: 'Aşamadan gelir' },
+        { simge: Coins, etiket: 'Çoklu para', deger: 'Fırsat bazında' },
+        { simge: UserRound, etiket: 'Sahiplik', deger: 'Kendi fırsatı / tümü' },
+        { simge: FileClock, etiket: 'Belge', deger: 'Teklif · sipariş' },
+      ]}
+      birincilEylem={yeniButon}
+      gostergeler={(satirlar) => {
+        if (satirlar.length === 0) return null;
+        const acik = satirlar.filter((l) => l.status === 'open');
+        const kazanildi = satirlar.filter((l) => l.status === 'won');
+        const kaybedildi = satirlar.filter((l) => l.status === 'lost');
+        const sonuclanan = kazanildi.length + kaybedildi.length;
+        const oran = sonuclanan === 0 ? null : Math.round((kazanildi.length / sonuclanan) * 100);
+        return (
+          <div className="grid grid-4">
+            <Stat label="Açık hattaki beklenen ciro" value={money(toplam(acik), currency)}
+                  hint={`${acik.length} açık fırsat`} />
+            <Stat label="Kazanıldı" value={kazanildi.length} hint={money(toplam(kazanildi), currency)} />
+            <Stat label="Kaybedildi" value={kaybedildi.length} hint={money(toplam(kaybedildi), currency)} />
+            <Stat label="Kazanma oranı" value={oran === null ? '—' : `%${oran}`}
+                  hint={sonuclanan === 0 ? 'Sonuçlanan fırsat yok' : `${sonuclanan} sonuçlanan fırsat`} />
+          </div>
+        );
+      }}
+      bosBaslik="Henüz fırsat yok"
+      bosMetin="Fırsat, bir müşteriyle konuşmaya başladığınız andır. İlkini açtığınızda burada beklenen ciro, kapanış tarihi ve sahibiyle birlikte listelenir."
+      dipnot={<span>Göstergeler yalnızca listelenen kayıtları sayar; süzgeç daralınca rakamlar da daralır.</span>}
+    />
   );
 }
 
@@ -74,7 +148,16 @@ export function LeadForm() {
   const stages = useList<Stage>('/crm/stages', { limit: 50 });
   const reasons = useList<LostReason>('/crm/lost-reasons', { limit: 50 });
 
-  const [form, setForm] = useState<Record<string, unknown>>({});
+  /**
+   * `?cari=` ile gelen istek cariyi ÖNCEDEN SEÇER.
+   *
+   * Cari kartındaki "Yeni Fırsat" buraya yönlendiriyor; parametre okunmasaydı
+   * kullanıcı, bir satır önce açtığı firmayı listeden tekrar aramak zorunda
+   * kalırdı.
+   */
+  const [arama] = useSearchParams();
+  const [form, setForm] = useState<Record<string, unknown>>(
+    () => (isNew && arama.get('cari') ? { partner_id: arama.get('cari') } : {}));
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
 
@@ -128,7 +211,7 @@ export function LeadForm() {
             <Field label="Müşteri">
               <select value={value('partner_id')} disabled={readOnly}
                       onChange={(e) => set('partner_id', e.target.value)}>
-                <option value="">— seçilmedi —</option>
+                <option value="">Seçilmedi</option>
                 {partners.data.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>

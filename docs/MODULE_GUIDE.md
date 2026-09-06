@@ -7,6 +7,11 @@ izolasyonunu, şube kapsamını, denetim izini ve olay entegrasyonunu bedava al�
 Migration numaralandırması: `0001-0099` çekirdek, `0100+` modüller
 (CRM 0100, Muhasebe 0200, İK 0300, Satın Alma 0400), `9999` yetkiler (daima son).
 
+Bir modülün tablosuna referans veren köprü fonksiyonları, **o modülün numara
+aralığında** yaşar — sahibi başka modül olsa bile. Bordro→Muhasebe köprüsü
+(`0305_hr_finance_bridge.sql`) finance'a aittir ama hr.payroll_runs'a referans
+verdiği için 0300'lerdedir. Dosya başındaki yorum bu sapmayı açıklamalıdır.
+
 ## 1. Modülü kaydet
 
 ```sql
@@ -63,6 +68,28 @@ select core.grant_to_role('accounting', array['finance.invoice.read.all', ...]);
 `core.grant_to_role` tanımsız bir izin kodu verilirse **hata verir** — sessizce
 yutmaz.
 
+### Eylem izni tek başına yetmez
+
+İş akışı fonksiyonları satırı `select ... for update` ile kilitler. PostgreSQL
+bu kilit için SELECT politikasına **ek olarak UPDATE politikasının da** geçmesini
+ister. Yani bir role `...approve` vermek yeterli değildir; ilgili varlıkta
+`write` izni de gerekir:
+
+```sql
+-- YANLIŞ: rol hiçbir talebi onaylayamaz, "kayıt bulunamadı" hatası alır
+select core.grant_to_role('branch_manager', array['purchasing.requisition.approve']);
+
+-- DOĞRU
+select core.grant_to_role('branch_manager', array[
+  'purchasing.requisition.approve', 'purchasing.requisition.write.all']);
+```
+
+Bir eylem BAŞKA bir varlığı da güncelliyorsa onun write izni de gerekir —
+örneğin mal kabul, sipariş satırlarının `received_quantity` alanını ilerlettiği
+için `purchasing.order.write.all` ister. Bu sınıf hata çalışma zamanında
+"kayıt bulunamadı" olarak görünür ve yetki sorunu gibi durmaz; rol testi yazmak
+tek güvenilir yakalama yöntemidir.
+
 ## 5. Olayları tanımla ve abone ol
 
 Yayınlayacağın olayları önce bildir:
@@ -87,6 +114,60 @@ create function finance.on_sales_order_confirmed(p_event jsonb) returns void ...
 Handler **idempotent** olmalıdır: yeniden deneme mekanizması aynı olayı ikinci
 kez teslim edebilir.
 
+### Tetikleyici sırası ad sırasıdır
+
+PostgreSQL, aynı olaydaki BEFORE tetikleyicilerini **ad sırasına göre** çalıştırır.
+Çekirdeğin `tenant_id`/`owner_id`/`created_by` dolduran tetikleyicisi bu yüzden
+`trg_00_` önekiyle adlandırılır ve her zaman ilk çalışır.
+
+Modül tetikleyicinizde `new.tenant_id` okuyorsanız bu garantiye güvenebilirsiniz.
+Ama daha sağlamı, değeri **ilişkili satırdan** almaktır:
+
+```sql
+-- Kırılgan: çekirdek tetikleyicisinin önce çalışmasına bağlı
+new.hourly_cost := projects.hourly_cost_for(new.tenant_id, ...);
+
+-- Sağlam: değer zaten okunan üst kayıttan gelir
+select * into v_proj from projects.projects where id = new.project_id;
+new.hourly_cost := projects.hourly_cost_for(v_proj.tenant_id, ...);
+```
+
+Bu sınıf hata **sessizdir**: `tenant_id` NULL olunca sorgu satır bulamaz ve
+fonksiyon sıfır döner — hata vermez, yalnızca yanlış hesaplar.
+
+### `.own` kapsamı owner_id'ye bakar
+
+Kayıt bazlı yetki `owner_id = core.current_user_id()` üzerinden çalışır ve
+çekirdek varsayılanı owner_id'yi **kaydı oluşturan** kişi yapar. Bazı varlıklarda
+sahiplik bu değildir: bir zaman kaydının sahibi onu giren yönetici değil, saati
+çalışan kişidir. Böyle durumlarda modül tetikleyicisi owner_id'yi bilerek ezer:
+
+```sql
+new.owner_id := new.user_id;   -- sahip, çalışan kişidir
+```
+
+Atlanırsa kullanıcı kendi kaydını `.own` kapsamında göremez.
+
+### Handler'lar oturum bağlamına GÜVENEMEZ
+
+Olay işleyici arka planda, kullanıcı oturumu olmadan çalışır. `core.current_tenant_id()`
+orada `NULL` döner. Bu yüzden handler'dan çağrılan her şey kiracıyı AÇIKÇA
+almalıdır:
+
+```sql
+-- YANLIŞ: handler içinde "aktif kiracı bulunamadı" ile düşer
+perform core.emit_event('inventory.move.done', payload, v_branch);
+select core.next_sequence('inventory_move', v_branch);
+
+-- DOĞRU
+perform core.emit_event('inventory.move.done', payload, v_branch, null, v_tenant);
+select core.next_sequence('inventory_move', v_branch, v_tenant);
+```
+
+Bir fonksiyon hem kullanıcı isteğinden hem handler'dan çağrılabiliyorsa
+(ör. `inventory.post_move`), kiracıyı işlediği SATIRDAN okumalıdır — oturumdan
+değil.
+
 ## 6. Kurulum kancası
 
 Yeni kiracıda modülün varsayılan verisini kuran fonksiyon:
@@ -101,6 +182,15 @@ select core.register_provisioner('finance', 'finance.provision_finance', 30::sma
 `core.provision_tenant()` yalnızca kiracıda **açık** modüllerin kancalarını
 çağırır — çekirdek, modüllerin içeriğini bilmez.
 
+Bir modül **birden fazla** kanca kaydedebilir; sıra `sequence` ile belirlenir.
+Bu, modüller arası köprüler için gerekli: örneğin bordro hesap eşlemelerini
+kuran kanca `finance` şemasına aittir ama `hr` modülüne bağlıdır, çünkü yalnızca
+İK açık olan kiracıda anlamlıdır:
+
+```sql
+select core.register_provisioner('hr', 'finance.provision_payroll_accounts', 45::smallint);
+```
+
 ## 7. Raporlar
 
 ```sql
@@ -109,6 +199,22 @@ with (security_invoker = on) as ...
 ```
 
 `security_invoker = on` **zorunludur**; unutulursa test paketi kırılır.
+
+RLS politikası, kullanıcının **başka bir tabloyu** okuyabilmesine dayanmamalıdır.
+`inventory.quants` politikası önce konumun şubesini `inventory.locations`'tan
+okuyordu; stok adedini görmesi gereken ama konum kartlarını görmesi gerekmeyen
+satış temsilcisi boş liste alıyordu ve sebep politikadan okunmuyordu. Doğrusu,
+gerekli bilgiyi `security definer` bir yardımcıyla üretmektir:
+
+```sql
+create function inventory.accessible_location_ids() returns uuid[]
+language sql stable security definer as $$ ... $$;
+
+-- politikada: (select inventory.accessible_location_ids()) @> array[location_id]
+```
+
+Yardımcı **argümansız** olmalıdır — o zaman `(select ...)` ile sarmalandığında
+satır başına değil sorgu başına bir kez çalışır.
 
 ## 8. Test yaz
 

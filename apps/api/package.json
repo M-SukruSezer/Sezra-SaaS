@@ -12,6 +12,14 @@
     "@sezra/core": "*",
     "@sezra/crm": "*",
     "@sezra/finance": "*",
-    "fastify": "^5.2.0"
+    "fastify": "^5.2.0",
+    "@sezra/hr": "*",
+    "@sezra/purchasing": "*",
+    "@sezra/inventory": "*",
+    "@sezra/quality": "*",
+    "@sezra/maintenance": "*",
+    "@sezra/pos": "*",
+    "@sezra/projects": "*",
+    "@sezra/helpdesk": "*"
   }
 }

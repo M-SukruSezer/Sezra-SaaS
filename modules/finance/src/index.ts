@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
-  registerResource, withContext, contextFromRequest, translatePgError,
-  notFound, badRequest, type SezraModule, type Tx,
+  registerResource, registerSearchSource, registerNotificationSource,
+  registerPartnerRelation,
+  withContext, contextFromRequest,
+  translatePgError, notFound, badRequest, type SezraModule, type Tx,
 } from '@sezra/core';
 import { getEInvoiceProvider } from './einvoice/registry.js';
 import type { CanonicalInvoice, CanonicalLine, EInvoiceProfile } from './einvoice/types.js';
@@ -40,6 +42,198 @@ export const financeModule: SezraModule = {
   code: 'finance',
 
   register(app: FastifyInstance) {
+    /* ---- Çek / senet ------------------------------------------------- */
+    registerResource(app, {
+      path: '/finance/notes',
+      schema: 'finance', table: 'notes', readFrom: 'v_note_list',
+      columns: ['id', 'branch_id', 'kind', 'direction', 'status', 'number', 'serial_no',
+        'partner_id', 'partner_name', 'drawer_name', 'bank_name', 'bank_branch',
+        'bank_account', 'issue_place', 'issue_date', 'due_date', 'amount', 'currency',
+        'bank_account_id', 'bank_account_name', 'endorsed_to_id', 'endorsed_to_name',
+        'payment_id', 'status_at', 'notes', 'owner_id', 'owner_name', 'branch_name',
+        'kalan_gun', 'vadesi_gecti', 'created_at', 'updated_at'],
+      // DURUM YAZILAMAZ: geçişler `note_set_status` üzerinden yapılır. Serbest
+      // bir UPDATE, tahsil edilmiş bir çeki portföye geri döndürmeye izin
+      // verirdi ve durum makinesi anlamını yitirirdi.
+      writable: ['branch_id', 'kind', 'direction', 'serial_no', 'partner_id',
+        'drawer_name', 'bank_name', 'bank_branch', 'bank_account', 'issue_place',
+        'issue_date', 'due_date', 'amount', 'currency', 'notes', 'owner_id'],
+      searchable: ['number', 'serial_no', 'drawer_name', 'bank_name', 'partner_name'],
+      defaultSort: 'due_date', defaultOrder: 'asc',
+    });
+
+    /** Çek/senedin durumunu değiştirir. Kurallar veritabanında. */
+    app.post('/finance/notes/:id/status', async (req) => {
+      const { id } = req.params as { id: string };
+      const b = (req.body ?? {}) as {
+        status?: unknown; bank_account_id?: unknown;
+        endorsed_to_id?: unknown; note?: unknown;
+      };
+      if (typeof b.status !== 'string') throw badRequest('status zorunlu');
+      return run(req, async (tx) => {
+        const [row] = await tx`
+          select * from finance.note_set_status(
+            ${id}, ${b.status as string}::finance.note_status,
+            ${(b.bank_account_id as string) ?? null},
+            ${(b.endorsed_to_id as string) ?? null},
+            ${(b.note as string) ?? null})`;
+        return { data: row };
+      });
+    });
+
+    /**
+     * Portföy özeti: vade dilimlerine göre elde duran evrak.
+     *
+     * "Ne kadar çekim var" sorusunun cevabı tek bir toplam değildir; bu ayın
+     * ve gelecek ayın vadeleri ayrı ayrı bilinmeden nakit planı yapılamaz.
+     */
+    app.get('/finance/reports/note-portfolio', async (req) => run(req, async (tx) => {
+      const rows = await tx`
+        select direction, kind,
+               count(*)::int as adet,
+               coalesce(sum(amount), 0) as toplam,
+               coalesce(sum(amount) filter (where due_date < current_date), 0) as vadesi_gecen,
+               coalesce(sum(amount) filter (
+                 where due_date between current_date and current_date + 30), 0) as gun_30,
+               coalesce(sum(amount) filter (
+                 where due_date > current_date + 30), 0) as sonra
+        from finance.notes
+        where status in ('portfoy', 'tahsile_verildi')
+        group by direction, kind
+        order by direction, kind`;
+      return { data: rows };
+    }));
+
+    /* ---- Bildirim: vadesi yaklaşan / geçen evrak --------------------- */
+    registerNotificationSource({
+      ad: 'finance.note.due', modul: 'finance', izin: 'finance.note.read.all',
+      uret: (tx, limit) => tx`
+        select id, number, kind, direction, partner_name, amount, currency, due_date,
+               (current_date - due_date) as gecikme
+        from finance.v_note_list
+        where status in ('portfoy', 'tahsile_verildi')
+          and due_date <= current_date + 7
+        order by due_date asc limit ${limit}`
+        .then((r) => r.map((x) => {
+          const n = x as {
+            id: string; number: string; kind: string; direction: string;
+            partner_name: string | null; amount: string; currency: string;
+            due_date: string; gecikme: number;
+          };
+          const tur = n.kind === 'cek' ? 'Çek' : 'Senet';
+          const gecti = n.gecikme > 0;
+          return {
+            key: `finance.note.due:${n.id}`,
+            baslik: gecti
+              ? `${tur} ${n.number} vadesi ${n.gecikme} gün geçti`
+              : `${tur} ${n.number} vadesi yaklaşıyor`,
+            metin: `${n.partner_name ?? 'Cari yok'} — ${n.amount} ${n.currency}`
+                 + (n.direction === 'in' ? ' (alınan)' : ' (verilen)'),
+            ton: (gecti ? 'tehlike' : 'uyari') as 'tehlike' | 'uyari',
+            yol: '/finance/notes',
+            zaman: n.due_date,
+          };
+        })),
+    });
+
+    /* ---- Cari kartı ilişkileri --------------------------------------- */
+    registerPartnerRelation({
+      anahtar: 'cek', etiket: 'Çek / Senet', sira: 55, modul: 'finance',
+      izin: 'finance.note.read.all',
+      ozet: async (tx, id) => {
+        const [r] = await tx`
+          select count(*)::int as adet, coalesce(sum(amount), 0)::text as toplam
+          from finance.notes where partner_id = ${id}`;
+        return r as { adet: number; toplam: string };
+      },
+      satirlar: (tx, id, limit) => tx`
+        select id, number, serial_no, kind, direction, status, bank_name,
+               issue_date, due_date, amount, currency, kalan_gun, vadesi_gecti
+        from finance.v_note_list where partner_id = ${id}
+        order by due_date desc limit ${limit}`,
+    });
+
+    /* ---- Cari kartı ilişkileri --------------------------------------- */
+    registerPartnerRelation({
+      anahtar: 'fatura', etiket: 'Fatura', sira: 40, modul: 'finance',
+      izin: 'finance.invoice.read.all',
+      ozet: async (tx, id) => {
+        const [r] = await tx`
+          select count(*)::int as adet, coalesce(sum(total), 0)::text as toplam
+          from finance.invoices where partner_id = ${id} and status <> 'cancelled'`;
+        return r as { adet: number; toplam: string };
+      },
+      satirlar: (tx, id, limit) => tx`
+        select id, kind, number, status, issue_date, due_date,
+               total, paid_total, balance_due, currency, einvoice_status
+        from finance.v_invoice_list where partner_id = ${id}
+        order by issue_date desc limit ${limit}`,
+    });
+
+    registerPartnerRelation({
+      anahtar: 'tahsilat', etiket: 'Tahsilat/Ödeme', sira: 50, modul: 'finance',
+      izin: 'finance.payment.read.all',
+      ozet: async (tx, id) => {
+        const [r] = await tx`
+          select count(*)::int as adet, coalesce(sum(amount), 0)::text as toplam
+          from finance.payments where partner_id = ${id} and status <> 'cancelled'`;
+        return r as { adet: number; toplam: string };
+      },
+      satirlar: (tx, id, limit) => tx`
+        select id, number, direction, payment_date, method, amount, currency,
+               allocated_total, status, reference
+        from finance.v_payment_list where partner_id = ${id}
+        order by payment_date desc limit ${limit}`,
+    });
+
+    /* ---- Bildirim: vadesi geçmiş tahsilat ----------------------------
+       Bir muhasebecinin gün içinde en çok kaçırdığı şey budur: fatura
+       kesilmiştir, ödenmemiştir ve vadesi geçmiştir. Kayıt zaten
+       veritabanında; bildirim onu ayrıca saklamaz, sorar. */
+    registerNotificationSource({
+      ad: 'finance.invoice.overdue', modul: 'finance', izin: 'finance.invoice.read.all',
+      uret: (tx, limit) => tx`
+        select id, number, partner_name, total, balance_due, currency, due_date,
+               (current_date - due_date) as gecikme
+        from finance.v_invoice_list
+        where kind = 'sale' and balance_due > 0
+          and due_date is not null and due_date < current_date
+        order by due_date asc limit ${limit}`
+        .then((r) => r.map((x) => {
+          const f = x as {
+            id: string; number: string | null; partner_name: string | null;
+            balance_due: string; currency: string; due_date: string; gecikme: number;
+          };
+          return {
+            key: `finance.invoice.overdue:${f.id}`,
+            baslik: `${f.number ?? 'Taslak fatura'} · ${f.gecikme} gün gecikti`,
+            metin: `${f.partner_name ?? 'Cari yok'} — ${f.balance_due} ${f.currency} tahsil edilmedi`,
+            ton: (f.gecikme > 30 ? 'tehlike' : 'uyari') as 'tehlike' | 'uyari',
+            yol: `/finance/sales/${f.id}`,
+            zaman: f.due_date,
+          };
+        })),
+    });
+
+    /* ---- Genel aramaya katkı: fatura ---------------------------------
+       Faturayı aramak, numarayı ya da carinin adını yazmaktır. Tutar da
+       alt satırda görünür ki aynı cariye kesilmiş iki fatura ayırt edilsin. */
+    registerSearchSource({
+      etiket: 'Fatura', sira: 6, modul: 'finance', izin: 'finance.invoice.read.all',
+      ara: (tx, desen, limit) => tx`
+        select id, coalesce(number, 'Taslak') as baslik, kind,
+               nullif(concat_ws(' · ', partner_name,
+                                to_char(total, 'FM999G999G990D00')), '') as alt
+        from finance.v_invoice_list
+        where coalesce(number, '') ilike ${desen} or coalesce(partner_name, '') ilike ${desen}
+           or coalesce(tax_no, '') ilike ${desen}
+        order by issue_date desc limit ${limit}`
+        .then((r) => r.map((x) => {
+          const f = x as { id: string; kind: string };
+          return { ...x, yol: `/finance/${f.kind === 'sale' ? 'sales' : 'purchases'}/${f.id}` } as never;
+        })),
+    });
+
     // ========================= Kaynaklar =========================
     registerResource(app, {
       path: '/finance/accounts',
@@ -268,6 +462,39 @@ export const financeModule: SezraModule = {
      * Rapor, tetikleyicilerle bakımı yapılan finance.account_balances tablosundan
      * okur — yevmiye satırlarını taramaz.
      */
+    // ========================= Panel =========================
+    // On iki gösterge tek turda gelir. Hepsi `security invoker`: panel,
+    // sorguyu çalıştıran kullanıcının GÖREBİLDİĞİ veriyi toplar, yani şube
+    // müdürü kendi şubesinin rakamlarını görür.
+    app.get('/finance/dashboard/kpis', async (req) =>
+      run(req, async (tx) => {
+        const [row] = await tx`select * from finance.dashboard_kpis()`;
+        return { data: row };
+      }));
+
+    app.get('/finance/dashboard/sales-trend', async (req) => {
+      const { days } = req.query as { days?: string };
+      return run(req, async (tx) => ({
+        data: await tx`
+          select * from finance.dashboard_sales_trend(${Math.min(Number(days ?? 30) || 30, 180)})`,
+      }));
+    });
+
+    app.get('/finance/dashboard/cash-accounts', async (req) =>
+      run(req, async (tx) => ({
+        data: await tx`select * from finance.dashboard_cash_accounts()`,
+      })));
+
+    app.get('/finance/dashboard/recent-sales', async (req) =>
+      run(req, async (tx) => ({
+        data: await tx`select * from finance.dashboard_recent_sales(6)`,
+      })));
+
+    app.get('/finance/dashboard/top-products', async (req) =>
+      run(req, async (tx) => ({
+        data: await tx`select * from finance.dashboard_top_products(6)`,
+      })));
+
     app.get('/finance/reports/trial-balance', async (req) => {
       const { from, to, branch_id } = req.query as Record<string, string | undefined>;
       return run(req, async (tx) => ({

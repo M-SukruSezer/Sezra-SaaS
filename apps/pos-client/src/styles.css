@@ -1,0 +1,117 @@
+/* Kasa ekranı: dokunmatik için tasarlandı — büyük hedefler, yüksek kontrast,
+   kaydırma gerektirmeyen tek ekran yerleşim. Yönetim arayüzünün yoğun tablo
+   estetiği burada işe yaramaz; kasiyer saniyeler içinde dokunur. */
+:root {
+  --c-bg: #0f1115;
+  --c-panel: #171a21;
+  --c-panel-2: #1f232c;
+  --c-line: #2a2f3a;
+  --c-text: #e8eaf0;
+  --c-mute: #8b93a7;
+  --c-accent: #3d7eff;
+  --c-ok: #2eb872;
+  --c-warn: #e0a020;
+  --c-danger: #e0574a;
+  --r: 10px;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--c-bg); color: var(--c-text);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+input, select { font: inherit; }
+
+.till { display: grid; grid-template-columns: 1fr 380px; height: 100%; }
+.pane { display: flex; flex-direction: column; min-height: 0; }
+.pane-right { background: var(--c-panel); border-left: 1px solid var(--c-line); }
+
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--c-line); background: var(--c-panel);
+}
+.brand { font-weight: 700; letter-spacing: .3px; }
+.spacer { flex: 1; }
+
+.pill {
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--c-panel-2); color: var(--c-mute);
+}
+.pill.ok { background: rgba(46,184,114,.15); color: var(--c-ok); }
+.pill.warn { background: rgba(224,160,32,.15); color: var(--c-warn); }
+.pill.danger { background: rgba(224,87,74,.15); color: var(--c-danger); }
+
+.scan {
+  padding: 12px 16px; border-bottom: 1px solid var(--c-line);
+}
+.scan input {
+  width: 100%; padding: 14px 16px; font-size: 18px;
+  background: var(--c-panel-2); border: 1px solid var(--c-line);
+  border-radius: var(--r); color: var(--c-text); outline: none;
+}
+.scan input:focus { border-color: var(--c-accent); }
+
+.grid {
+  flex: 1; overflow: auto; padding: 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px; align-content: start;
+}
+.tile {
+  background: var(--c-panel); border: 1px solid var(--c-line); border-radius: var(--r);
+  padding: 14px; text-align: left; min-height: 92px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.tile:active { border-color: var(--c-accent); transform: scale(.98); }
+.tile-name { font-weight: 600; font-size: 15px; }
+.tile-sku { color: var(--c-mute); font-size: 11px; margin-top: 2px; }
+.tile-price { font-size: 17px; font-weight: 700; margin-top: 8px; }
+
+.cart { flex: 1; overflow: auto; }
+.cart-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--c-line);
+}
+.cart-name { font-weight: 600; }
+.cart-meta { color: var(--c-mute); font-size: 12px; }
+.qty { display: flex; align-items: center; gap: 8px; }
+.qty button {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--c-panel-2); border: 1px solid var(--c-line);
+}
+.qty span { min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
+.cart-total { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 90px; text-align: right; }
+
+.totals { padding: 14px 16px; border-top: 1px solid var(--c-line); }
+.trow { display: flex; justify-content: space-between; padding: 3px 0; color: var(--c-mute); }
+.trow.grand { color: var(--c-text); font-size: 24px; font-weight: 700; padding-top: 10px; }
+
+.actions { padding: 14px 16px; display: grid; gap: 10px; border-top: 1px solid var(--c-line); }
+.btn {
+  padding: 14px; border-radius: var(--r); border: 1px solid var(--c-line);
+  background: var(--c-panel-2); font-weight: 600;
+}
+.btn-primary { background: var(--c-accent); border-color: var(--c-accent); color: #fff; }
+.btn-ghost { background: transparent; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.center { display: grid; place-items: center; height: 100%; padding: 24px; }
+.card {
+  background: var(--c-panel); border: 1px solid var(--c-line); border-radius: 14px;
+  padding: 24px; width: 100%; max-width: 460px;
+}
+.card h1 { margin: 0 0 4px; font-size: 20px; }
+.card p { color: var(--c-mute); margin: 0 0 18px; }
+.field { display: grid; gap: 6px; margin-bottom: 14px; }
+.field label { font-size: 13px; color: var(--c-mute); }
+.field input, .field select {
+  padding: 12px; border-radius: var(--r); background: var(--c-panel-2);
+  border: 1px solid var(--c-line); color: var(--c-text);
+}
+.err { color: var(--c-danger); font-size: 13px; margin-top: 8px; }
+.empty { color: var(--c-mute); text-align: center; padding: 40px 20px; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.keypad button { padding: 16px; font-size: 18px; border-radius: 8px;
+  background: var(--c-panel-2); border: 1px solid var(--c-line); }

@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
-  registerResource, withContext, contextFromRequest, translatePgError,
-  notFound, badRequest, type SezraModule, type Tx,
+  registerResource, registerSearchSource, registerPartnerRelation,
+  withContext, contextFromRequest,
+  translatePgError, notFound, badRequest, type SezraModule, type Tx,
 } from '@sezra/core';
 
 /** Bağlamlı sorgu kısayolu — her uçta tekrar etmemek için. */
@@ -31,6 +32,100 @@ export const crmModule: SezraModule = {
   code: 'crm',
 
   register(app: FastifyInstance) {
+    /* ---- Cari kartı ilişkileri --------------------------------------- */
+    registerPartnerRelation({
+      anahtar: 'firsat', etiket: 'Fırsat', sira: 10, modul: 'crm', izin: 'crm.lead.read.all',
+      ozet: async (tx, id) => {
+        const [r] = await tx`
+          select count(*)::int as adet, coalesce(sum(expected_revenue), 0)::text as toplam
+          from crm.leads where partner_id = ${id}`;
+        return r as { adet: number; toplam: string };
+      },
+      satirlar: (tx, id, limit) => tx`
+        select id, name, status, stage_name, expected_revenue, currency,
+               expected_close_date, owner_name, updated_at
+        from crm.v_lead_list where partner_id = ${id}
+        order by updated_at desc limit ${limit}`,
+    });
+
+    registerPartnerRelation({
+      anahtar: 'teklif', etiket: 'Teklif', sira: 20, modul: 'crm', izin: 'crm.quotation.read.all',
+      ozet: async (tx, id) => {
+        const [r] = await tx`
+          select count(*)::int as adet, coalesce(sum(total), 0)::text as toplam
+          from crm.quotations where partner_id = ${id} and status <> 'cancelled'`;
+        return r as { adet: number; toplam: string };
+      },
+      satirlar: (tx, id, limit) => tx`
+        select id, number, status, issue_date, valid_until, total, currency, line_count
+        from crm.v_quotation_list where partner_id = ${id}
+        order by issue_date desc limit ${limit}`,
+    });
+
+    registerPartnerRelation({
+      anahtar: 'siparis', etiket: 'Sipariş', sira: 30, modul: 'crm', izin: 'crm.sale_order.read.all',
+      ozet: async (tx, id) => {
+        const [r] = await tx`
+          select count(*)::int as adet, coalesce(sum(total), 0)::text as toplam
+          from crm.sale_orders where partner_id = ${id} and status <> 'cancelled'`;
+        return r as { adet: number; toplam: string };
+      },
+      satirlar: (tx, id, limit) => tx`
+        select id, number, status, order_date, delivery_date, total, currency, line_count
+        from crm.v_sale_order_list where partner_id = ${id}
+        order by order_date desc limit ${limit}`,
+    });
+
+    registerPartnerRelation({
+      anahtar: 'aktivite', etiket: 'Aktivite', sira: 80, modul: 'crm', izin: 'crm.activity.read.all',
+      ozet: async (tx, id) => {
+        const [r] = await tx`
+          select count(*)::int as adet from crm.activities where partner_id = ${id}`;
+        return { adet: Number((r as { adet: number }).adet), toplam: null };
+      },
+      satirlar: (tx, id, limit) => tx`
+        select id, kind, subject, notes, due_at, done_at, outcome, created_at
+        from crm.activities where partner_id = ${id}
+        order by coalesce(due_at, created_at) desc limit ${limit}`,
+    });
+
+    /* ---- Genel aramaya katkı ------------------------------------------
+       Modül kendi kayıtlarını kendisi tanıtır; core'un CRM tablolarını
+       bilmesi gerekseydi modüler yapı adı üstünde kalırdı. */
+    registerSearchSource({
+      etiket: 'Fırsat', sira: 3, modul: 'crm', izin: 'crm.lead.read.all',
+      ara: (tx, desen, limit) => tx`
+        select id, name as baslik,
+               nullif(concat_ws(' · ', partner_name, contact_name), '') as alt
+        from crm.v_lead_list
+        where name ilike ${desen} or coalesce(contact_name, '') ilike ${desen}
+           or coalesce(email, '') ilike ${desen} or coalesce(partner_name, '') ilike ${desen}
+        order by updated_at desc limit ${limit}`
+        .then((r) => r.map((x) => ({ ...x, yol: `/crm/leads/${(x as { id: string }).id}` } as never))),
+    });
+
+    registerSearchSource({
+      etiket: 'Teklif', sira: 4, modul: 'crm', izin: 'crm.quotation.read.all',
+      ara: (tx, desen, limit) => tx`
+        select id, coalesce(number, 'Taslak') as baslik,
+               nullif(concat_ws(' · ', partner_name, to_char(total, 'FM999G999G990D00')), '') as alt
+        from crm.v_quotation_list
+        where coalesce(number, '') ilike ${desen} or coalesce(partner_name, '') ilike ${desen}
+        order by issue_date desc limit ${limit}`
+        .then((r) => r.map((x) => ({ ...x, yol: `/crm/quotations/${(x as { id: string }).id}` } as never))),
+    });
+
+    registerSearchSource({
+      etiket: 'Satış siparişi', sira: 5, modul: 'crm', izin: 'crm.sale_order.read.all',
+      ara: (tx, desen, limit) => tx`
+        select id, coalesce(number, 'Taslak') as baslik,
+               nullif(concat_ws(' · ', partner_name, to_char(total, 'FM999G999G990D00')), '') as alt
+        from crm.v_sale_order_list
+        where coalesce(number, '') ilike ${desen} or coalesce(partner_name, '') ilike ${desen}
+        order by order_date desc limit ${limit}`
+        .then((r) => r.map((x) => ({ ...x, yol: `/crm/orders/${(x as { id: string }).id}` } as never))),
+    });
+
     // ========================= Kaynaklar =========================
     registerResource(app, {
       path: '/crm/leads',

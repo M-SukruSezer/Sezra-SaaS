@@ -53,7 +53,7 @@ olmaz, her satırda fonksiyon çağrısı doğardı. DRY'lik bunun yerine politi
 satır varsa yalnızca listelenenleri. Bu kural `core.accessible_branch_ids()`
 içinde tek yerde yaşar.
 
-Colombia Coffee senaryosu: Zonguldak şube müdürü Düzce fırsatlarını göremez,
+örnek kiracı senaryosu: Zonguldak şube müdürü Düzce fırsatlarını göremez,
 şirket yöneticisi ikisini de görür (test 2 ve 4).
 
 ## 4. Yetkilendirme: Odoo'nun "Access Rights + Record Rules" ikilisi
@@ -197,3 +197,72 @@ P&L özet görünümünde her filtreli toplam `coalesce(..., 0)` ile sarmalanır
 Eşleşen satır yoksa `sum(...) filter (...)` sıfır değil **NULL** döner; henüz
 gideri olmayan bir işletmede bu, net kârın NULL çıkmasına ve raporun "kâr yok"
 gibi görünmesine yol açar. Aynı tuzak cari yaşlandırma görünümünde de vardı.
+
+## 14. Çek/senet: kıymetli evrak bir durum makinesidir
+
+Elde duran bir çek henüz para değildir. Portföydeki evrak ile kasa bakiyesi
+ayrı şeylerdir ve nakit planı ikisini birden bilmeden yapılamaz; bu yüzden
+çek/senet `finance.notes` içinde kendi yaşam döngüsüyle durur, tahsilat
+kaydının bir alanı olarak değil.
+
+Geçerli geçişler `finance.note_gecis_gecerli(direction, from, to)` içinde ve
+**yön bazlıdır**: alınan (`in`) evrak ciro edilebilir, verilen (`out`) evrak
+edilemez — bizim borcumuzdur, elimizde değildir. Geçiş kuralının bir kopyası
+arayüzde de var (`Notes.tsx`), ama o yalnızca erken geri bildirim içindir;
+sınır veritabanıdır ve test edilen odur.
+
+Yetki kontrolü `for update` kilidinden **önce** yapılır. RLS, `select ... for
+update` sorgusuna UPDATE politikasını da uygular: yazma yetkisi olmayan
+kullanıcı satırı kilitleyemez ve sorgu boş döner. Kontrol kilitten sonra
+yapılsaydı, evrakı görebilen ama değiştiremeyen kullanıcıya "çek bulunamadı"
+denirdi — oysa çek duruyor, eksik olan yetki.
+
+Çek ve senet **ayrı seri** taşır (`CEK-`, `SNT-`) ve seriler kiracı açılışında
+`finance.provision_finance` içinde yaratılır. Seri satırı yoksa
+`core.next_sequence` ön eki kodun ilk üç harfinden türetir; her iki tür için de
+`FIN-` çıkar ve numaralar çakışır.
+
+## 15. SMS: İYS izni uygulama katmanında değil, veritabanında
+
+6563 sayılı kanuna göre ticari elektronik ileti, alıcının **kanal bazında**
+onayı olmadan gönderilemez ve denetimde ispat yükü göndericidedir. Kontrol
+`core.sms_enqueue` içinde: arayüze bırakılsaydı, API'yi doğrudan çağıran bir
+entegrasyon izinsiz mesaj atabilirdi. Bu bir arayüz tercihi değil, hukuki bir
+sınırdır.
+
+Bilgilendirme iletisi ("siparişiniz kargoya verildi") ticari ileti değildir ve
+izin gerektirmez; `is_commercial` bu ayrımı taşır. Her mesajı ticari saymak,
+meşru bilgilendirmeyi de imkânsız kılardı.
+
+**Engellenen mesaj da kaydedilir** (`status = 'blocked'`, `error` dolu).
+Sessizce atmamak, denetimde "neden gönderilmedi" sorusunun cevabını bırakır.
+
+Gönderim iki adımdır: önce veritabanına kayıt, sonra uygulama katmanından
+sağlayıcıya HTTP. Veritabanı dışarıya istek atmaz — atarsa işlem süresi ağın
+insafına kalır ve kilitler uzar. Sağlayıcı parolası hiçbir yanıtta dönmez; okuma
+ucu yalnızca "tanımlı mı" bilgisini verir.
+
+## 16. Müşteri portalı: kapsam üyeliğin üzerinde taşınır
+
+Portal kullanıcısı ayrı bir tablo ya da ayrı bir kimlik sistemi değildir;
+`core.memberships.portal_partner_id` dolu olan bir üyeliktir. Kapsamı
+`core.current_portal_partner_id()` söyler ve görünürlük **tablo başına ayrı
+SELECT politikalarıyla** verilir (`core.attach_portal_policy`). Mevcut
+politikaları gevşetmek yerine ayrı politika eklemek bilinçli: portal rolüne
+yanlışlıkla verilmiş bir izin bile personel ekranlarını açmaz, çünkü portalın
+gördüğü her şey ayrıca `partner_id = current_portal_partner_id()` şartına bağlı.
+
+Politikayı **çekirdek değil modül takar** (`0104`, `0207`, `1004`). Çekirdek
+migration'ları modüllerden önce koşar; `0027` içinde `finance.invoices` adını
+anmak, tablo henüz yokken politika yazmaya çalışmak olurdu — arama, bildirim ve
+cari ilişkilerinde kullanılan kayıt kalıbının aynısı.
+
+Yazma politikası **hiç yoktur**. Portal kullanıcısı kendi cari kartını bile
+güncelleyemez.
+
+Davet jetonu tabloda **saklanmaz**; yalnızca sha256 özeti durur. Jeton tek
+seferde, oluşturma yanıtında görünür. Kaybolan jetonun yolu daveti iptal edip
+yenisini oluşturmaktır — davet listesini okuyabilen biri davetleri kabul
+edebilmemeli. Personel adresine portal daveti gönderilemez: kabul edilseydi
+`portal_partner_id` mevcut personel üyeliğinin üzerine yazılır ve kişi hem
+çalışan hem portal kullanıcısı olurdu.

@@ -1,9 +1,41 @@
 {
   "files": [],
   "references": [
-    { "path": "./core" },
-    { "path": "./modules/crm" },
-    { "path": "./modules/finance" },
-    { "path": "./apps/api" }
+    {
+      "path": "./core"
+    },
+    {
+      "path": "./modules/crm"
+    },
+    {
+      "path": "./modules/finance"
+    },
+    {
+      "path": "./modules/hr"
+    },
+    {
+      "path": "./modules/purchasing"
+    },
+    {
+      "path": "./modules/inventory"
+    },
+    {
+      "path": "./modules/quality"
+    },
+    {
+      "path": "./modules/maintenance"
+    },
+    {
+      "path": "./modules/pos"
+    },
+    {
+      "path": "./modules/projects"
+    },
+    {
+      "path": "./modules/helpdesk"
+    },
+    {
+      "path": "./apps/api"
+    }
   ]
 }

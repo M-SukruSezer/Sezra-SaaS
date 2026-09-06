@@ -174,8 +174,11 @@ begin
 
     exception when others then
       -- Handler hatası tüm partiyi düşürmemeli: üstel geri çekilme ile yeniden dene
+      -- CASE dalları `unknown` çözülüp text'e düştüğü için enum'a açık dönüşüm
+      -- ŞART. Bu olmadan handler hatası, hatayı KAYDEDEMEDEN dispatcher'ı
+      -- düşürür ve asıl sebep hiçbir yerde görünmez.
       update core.event_deliveries
-         set status = case when attempts + 1 >= r.max_attempts then 'dead' else 'failed' end,
+         set status = (case when attempts + 1 >= r.max_attempts then 'dead' else 'failed' end)::core.event_status,
              last_error = left(sqlstate || ' ' || sqlerrm, 2000),
              next_attempt_at = now() + (power(3, least(attempts, 5)) || ' seconds')::interval
        where id = r.delivery_id;
@@ -215,7 +218,7 @@ alter table core.events enable row level security;
 alter table core.events force row level security;
 drop policy if exists p_events_select on core.events;
 create policy p_events_select on core.events for select
-  using ((select core.is_support_session())
+  using (tenant_id = (select core.support_tenant_id())
          or (tenant_id = (select core.current_tenant_id())
              and (select core.has_perm('core.event.read.all'))));
 
@@ -223,6 +226,6 @@ alter table core.event_deliveries enable row level security;
 alter table core.event_deliveries force row level security;
 drop policy if exists p_event_deliveries_select on core.event_deliveries;
 create policy p_event_deliveries_select on core.event_deliveries for select
-  using ((select core.is_support_session())
+  using (tenant_id = (select core.support_tenant_id())
          or (tenant_id = (select core.current_tenant_id())
              and (select core.has_perm('core.event.read.all'))));

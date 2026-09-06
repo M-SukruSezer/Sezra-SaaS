@@ -3,19 +3,28 @@
   "private": true,
   "version": "0.1.0",
   "description": "Çok kiracılı, modüler ERP SaaS platformu",
-  "workspaces": ["core", "modules/*", "apps/*"],
+  "workspaces": [
+    "core",
+    "modules/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "npm run dev --workspace @sezra/api",
     "build": "tsc --build",
-    "typecheck": "tsc --build --force",
+    "typecheck": "tsc --build --force && npm run typecheck --workspace @sezra/web && npm run typecheck --workspace @sezra/pos-client",
     "test:db": "bash scripts/test.sh",
-    "test:api": "node --test --experimental-strip-types apps/api/test/*.test.ts",
-    "migrate": "bash scripts/migrate.sh"
+    "test:api": "bash scripts/db-reset.sh >/dev/null && node --test --test-concurrency=1 --experimental-strip-types apps/api/test/*.test.ts",
+    "migrate": "bash scripts/migrate.sh",
+    "dev:api": "npm run dev --workspace @sezra/api",
+    "dev:web": "npm run dev --workspace @sezra/web",
+    "dev:pos": "npm run dev --workspace @sezra/pos-client"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }

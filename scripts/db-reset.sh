@@ -3,11 +3,31 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# shellcheck source=scripts/load-env.sh
+source "$(dirname "$0")/load-env.sh"
+
 PSQL=(psql -v ON_ERROR_STOP=1 -q)
 [ -n "${DATABASE_URL:-}" ] && PSQL+=(-d "$DATABASE_URL")
 
 if [ -n "${DATABASE_URL:-}" ]; then
-  "${PSQL[@]}" -c "drop schema if exists purchasing, hr, finance, crm, core cascade" >/dev/null
+  # Şema listesi ELLE SAYILMAZ. Sayıldığında, yeni bir modül eklendiğinde onun
+  # şeması resetten sağ çıkar; `create table if not exists` de mevcut tabloyu
+  # atladığı için yeni kolonlar sessizce uygulanmaz ve migration'lar "geçti"
+  # görünürken şema eskide kalır. Bunun yerine bu kullanıcıya ait sistem dışı
+  # tüm şemalar düşürülür (sezra_dev bu proje için ayrılmış bir veritabanıdır).
+  "${PSQL[@]}" -c "do \$\$
+     declare s text;
+     begin
+       for s in
+         select n.nspname from pg_namespace n
+         join pg_roles r on r.oid = n.nspowner
+         where r.rolname = current_user
+           and n.nspname not in ('public', 'information_schema')
+           and n.nspname not like 'pg\\_%'
+       loop
+         execute format('drop schema if exists %I cascade', s);
+       end loop;
+     end \$\$;" >/dev/null
   # public'i de temizle (test yardımcı fonksiyonları orada yaşıyor).
   # PG15+ yeni oluşturulan public şemasında PUBLIC'e USAGE vermez; geri veriyoruz
   # ki uygulama rolü şemayı görebilsin (CREATE bilinçli olarak verilmiyor).
@@ -25,4 +45,4 @@ for f in supabase/migrations/*.sql; do
   fi
 done
 
-"${PSQL[@]}" -f supabase/seed/demo_colombia.sql >/dev/null 2>&1 || { echo "SEED HATASI"; exit 1; }
+"${PSQL[@]}" -f supabase/seed/demo_tenant.sql >/dev/null 2>&1 || { echo "SEED HATASI"; exit 1; }

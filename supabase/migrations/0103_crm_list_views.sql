@@ -55,7 +55,10 @@ create or replace view core.v_partner_list
 with (security_invoker = on) as
 select pa.*,
        u.full_name as owner_name,
-       b.name      as branch_name
+       b.name      as branch_name,
+       -- Vergi numarası geçerliliği LİSTEDE de görünür: kartı açmadan hangi
+       -- carilerin numarası bozuk, süzerek görülebilsin.
+       core.tax_no_valid(pa.tax_no) as tax_no_valid
 from core.partners pa
 left join core.users u on u.id = pa.owner_id
 left join core.branches b on b.id = pa.branch_id;

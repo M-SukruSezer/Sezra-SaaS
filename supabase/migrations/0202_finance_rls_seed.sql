@@ -22,7 +22,7 @@ alter table finance.account_balances enable row level security;
 alter table finance.account_balances force row level security;
 drop policy if exists p_account_balances_select on finance.account_balances;
 create policy p_account_balances_select on finance.account_balances for select
-  using ((select core.is_support_session())
+  using (tenant_id = (select core.support_tenant_id())
          or (tenant_id = (select core.current_tenant_id())
              and (branch_id is null or (select core.accessible_branch_ids()) @> array[branch_id])
              and (select core.has_perm('finance.report.read'))));
@@ -31,7 +31,7 @@ alter table finance.account_mappings enable row level security;
 alter table finance.account_mappings force row level security;
 drop policy if exists p_account_mappings_select on finance.account_mappings;
 create policy p_account_mappings_select on finance.account_mappings for select
-  using ((select core.is_support_session()) or tenant_id = (select core.current_tenant_id()));
+  using (tenant_id = (select core.support_tenant_id()) or tenant_id = (select core.current_tenant_id()));
 drop policy if exists p_account_mappings_write on finance.account_mappings;
 create policy p_account_mappings_write on finance.account_mappings for all
   using (tenant_id = (select core.current_tenant_id()) and (select core.has_perm('finance.account.write.all')))
@@ -94,7 +94,7 @@ select core.grant_to_role('accounting', array[
 ]);
 
 -- Şube müdürü: kendi şubesinin faturalarını görür ve P&L'ini okur, ama
--- muhasebeleştiremez. (Colombia Coffee'deki şube bazlı P&L erişimi.)
+-- muhasebeleştiremez. (Örnek Ticaret A.Ş.'deki şube bazlı P&L erişimi.)
 select core.grant_to_role('branch_manager', array[
   'finance.invoice.read.all','finance.invoice.create',
   'finance.payment.read.all',
@@ -226,7 +226,7 @@ begin
     ('vat_withholding_payable', '360'),
     ('sales_income',            '600'),
     ('sales_discount',          '611'),
-    -- Perakende/F&B varsayımı: alışlar stoka girer. Hizmet işletmesi bunu
+    -- Varsayılan (stoklu işletme): alışlar stoka girer. Hizmet işletmesi bunu
     -- muhasebe ayarlarından 770'e çevirebilir.
     ('purchase_expense',        '153'),
     ('cash',                    '100'),
@@ -241,7 +241,13 @@ begin
     (p_tenant_id, 'finance_journal',          'YEV-', 6, 'year'),
     (p_tenant_id, 'finance_sale_invoice',     'SFT-', 6, 'year'),
     (p_tenant_id, 'finance_purchase_invoice', 'AFT-', 6, 'year'),
-    (p_tenant_id, 'finance_payment',          'TAH-', 6, 'year')
+    (p_tenant_id, 'finance_payment',          'TAH-', 6, 'year'),
+    -- ÇEK VE SENET AYRI SERİ: ikisi ayrı kıymetli evrak türü ve muhasebe
+    -- ikisini ayrı takip eder. Seri satırı yoksa `core.next_sequence` kodun
+    -- ilk üç harfinden ön ek türetir -- `finance_cek` ve `finance_senet`
+    -- için ikisi de 'FIN-' olur ve numaralar çakışır.
+    (p_tenant_id, 'finance_cek',              'CEK-', 6, 'year'),
+    (p_tenant_id, 'finance_senet',            'SNT-', 6, 'year')
   on conflict do nothing;
 
   -- İçinde bulunulan mali yıl ve ayları

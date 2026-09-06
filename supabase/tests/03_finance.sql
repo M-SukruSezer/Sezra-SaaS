@@ -52,10 +52,22 @@ select public.t_assert(
   not (select is_leaf from finance.accounts where code = '12'),
   '12 grup hesabına doğrudan kayıt atılamaz (is_leaf = false)');
 
+-- Sayı DEĞİL, anahtar varlığı sınanıyor: başka bir modül kendi eşlemesini
+-- eklediğinde (ör. bordro köprüsü) bu test kırılmamalı, ama finance'in kendi
+-- eşlemelerinden biri kaybolursa kırılmalı.
 select public.t_assert(
-  (select count(*) from finance.account_mappings) = 11,
-  'Hesap eşlemeleri tanımlı',
-  (select count(*)::text from finance.account_mappings));
+  not exists (
+    select 1 from unnest(array[
+      'receivable','payable','vat_output','vat_input','vat_withholding_payable',
+      'sales_income','sales_discount','purchase_expense','cash','bank','period_profit'
+    ]) k
+    where not exists (select 1 from finance.account_mappings m where m.key = k)),
+  'Muhasebe hesap eşlemelerinin tamamı tanımlı',
+  (select string_agg(k, ', ') from unnest(array[
+      'receivable','payable','vat_output','vat_input','vat_withholding_payable',
+      'sales_income','sales_discount','purchase_expense','cash','bank','period_profit'
+    ]) k
+    where not exists (select 1 from finance.account_mappings m where m.key = k)));
 
 select public.t_assert(
   (select a.code from finance.accounts a
@@ -107,7 +119,7 @@ select public.t_assert(
 \echo ''
 \echo '=== 3. MUHASEBELEŞTİRME VE DEĞİŞMEZLİK ==='
 update finance.journal_entry_lines
-   set partner_id = (select id from core.partners where name like 'Düzce%' limit 1)
+   set partner_id = (select id from core.partners where name like 'Alfa%' limit 1)
  where entry_id = :'unbalanced_id' and sequence = 30;
 
 select (finance.post_entry(:'unbalanced_id')).number as entry_number \gset
@@ -156,8 +168,8 @@ reset role;
 select public.t_assert(
   (select count(*) from core.event_deliveries d
     join core.events e on e.id = d.event_id
-   where e.topic = 'sales.order.confirmed') = 1,
-  'Sipariş onayı olayı için tek teslimat kuyruğa alındı');
+   where e.topic = 'sales.order.confirmed') >= 1,
+  'Sipariş onayı olayı kuyruğa alındı');
 
 select core.dispatch_events(50) as dispatched \gset
 
@@ -258,7 +270,7 @@ values ('purchase', :'supplier', current_date, 30)
 returning id as pinv_id \gset
 
 insert into finance.invoice_lines (invoice_id, sequence, account_id, description, quantity, unit_price, tax_id)
-values (:'pinv_id', 10, :'acc_153', 'Yeşil çekirdek 100 kg', 100, 500, :'tax_t510');
+values (:'pinv_id', 10, :'acc_153', 'Hammadde 201 — 100 kg', 100, 500, :'tax_t510');
 
 select public.t_assert(
   (select subtotal from finance.invoices where id = :'pinv_id') = 50000.00
@@ -361,7 +373,7 @@ select public.t_assert(
 \echo '=== 9. KAPALI DÖNEM ==='
 reset role;
 update finance.fiscal_periods set is_closed = true
- where tenant_id = (select id from core.tenants where slug = 'colombia-coffee')
+ where tenant_id = (select id from core.tenants where slug = 'ornek-ticaret')
    and current_date between date_from and date_to;
 set role sezra_app;
 
@@ -379,7 +391,7 @@ select public.t_assert(
 
 reset role;
 update finance.fiscal_periods set is_closed = false
- where tenant_id = (select id from core.tenants where slug = 'colombia-coffee');
+ where tenant_id = (select id from core.tenants where slug = 'ornek-ticaret');
 set role sezra_app;
 
 \echo ''
@@ -409,11 +421,11 @@ select public.t_assert(
   not core.has_perm('finance.report.pl') and not core.has_perm('finance.entry.read.all'),
   'Satış temsilcisinin muhasebe raporlarına erişimi yok');
 
-select set_config('app.user_id', '55555555-5555-5555-5555-555555555555', false);  -- Rakip Kafe
+select set_config('app.user_id', '55555555-5555-5555-5555-555555555555', false);  -- Rakip Ticaret
 select public.t_assert(
   (select count(*) from finance.invoices) = 0
   and (select count(*) from finance.journal_entries) = 0,
-  'Başka kiracı Colombia''nın muhasebesini göremez');
+  'Başka kiracı Örnek Ticaret''nın muhasebesini göremez');
 
 select public.t_assert(
   (select count(*) from finance.accounts) = 63,

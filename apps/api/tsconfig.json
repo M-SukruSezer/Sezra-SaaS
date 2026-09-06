@@ -1,6 +1,45 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "./dist", "rootDir": "./src" },
-  "include": ["src/**/*.ts"],
-  "references": [{ "path": "../../core" }, { "path": "../../modules/crm" }, { "path": "../../modules/finance" }]
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../core"
+    },
+    {
+      "path": "../../modules/crm"
+    },
+    {
+      "path": "../../modules/finance"
+    },
+    {
+      "path": "../../modules/hr"
+    },
+    {
+      "path": "../../modules/purchasing"
+    },
+    {
+      "path": "../../modules/inventory"
+    },
+    {
+      "path": "../../modules/quality"
+    },
+    {
+      "path": "../../modules/maintenance"
+    },
+    {
+      "path": "../../modules/pos"
+    },
+    {
+      "path": "../../modules/projects"
+    },
+    {
+      "path": "../../modules/helpdesk"
+    }
+  ]
 }

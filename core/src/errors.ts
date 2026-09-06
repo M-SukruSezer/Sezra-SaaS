@@ -33,8 +33,21 @@ export function translatePgError(err: unknown): AppError {
   switch (e?.code) {
     case '23505':
       return conflict(`Bu kayıt zaten mevcut${e.constraint_name ? ` (${e.constraint_name})` : ''}`);
-    case '23503':
+    case '23503': {
+      // 23503 İKİ AYRI DURUMU kapsar ve ikisi birbirinin tersidir:
+      //   - yazarken: gösterilen kayıt YOK ("İlişkili kayıt bulunamadı")
+      //   - silerken: kayda BAŞKALARI bağlı ("hâlâ referans veriliyor")
+      // İkisine aynı cümleyi yazmak, belgesi olduğu için silinemeyen bir
+      // cariyi silmeye çalışan kullanıcıya "kayıt bulunamadı" dedirtiyordu.
+      const bagli = /still referenced/i.test(e.detail ?? '');
+      if (bagli) {
+        const tablo = /from table "([^"]+)"/i.exec(e.detail ?? '')?.[1];
+        return conflict(
+          `Bu kayda bağlı ${tablo ? `${tablo} ` : ''}kayıtları var; silinemez.`
+          + ' Önce bağlı kayıtları kaldırın ya da kaydı pasife alın.');
+      }
       return new AppError(422, 'fk_violation', 'İlişkili kayıt bulunamadı', e.detail);
+    }
     case '23514':
       return new AppError(422, 'check_violation', e.message ?? 'Geçersiz değer');
     case '23502':
@@ -45,7 +58,14 @@ export function translatePgError(err: unknown): AppError {
       return notFound(e.message ?? 'Kayıt bulunamadı');
     case '22P02':
       return badRequest('Geçersiz kimlik ya da veri biçimi');
-    default:
-      return new AppError(500, 'internal_error', 'Beklenmeyen bir hata oluştu');
+    default: {
+      // İstemciye ayrıntı SIZDIRILMAZ ama sunucu günlüğünde kaybolmamalı:
+      // özgün hata `cause` olarak taşınır, logger onu yazar. Bu olmadan
+      // 500'ler "Beklenmeyen bir hata oluştu" diye tek satıra iner ve
+      // hangi sorgunun neden düştüğü anlaşılamaz.
+      const wrapped = new AppError(500, 'internal_error', 'Beklenmeyen bir hata oluştu');
+      (wrapped as { cause?: unknown }).cause = err;
+      return wrapped;
+    }
   }
 }

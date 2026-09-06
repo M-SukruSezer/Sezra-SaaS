@@ -57,6 +57,19 @@ function parseFilters(query: Record<string, unknown>, allowed: readonly string[]
     let value: unknown = raw;
     if (op === 'in') value = String(raw).split(',').filter(Boolean);
     else if (op === 'is') value = raw === 'null' ? null : raw === 'true';
+    // 'true'/'false' METNİ boolean'a çevrilir.
+    //
+    // Sürücü (postgres.js) parametrenin tipini hedef kolondan çözüyor: kolon
+    // boolean ise gelen JS değeri boolean serileştiricisine giriyor ve
+    // `'true' === true` yanlış olduğu için METİN HER ZAMAN false'a dönüşüyor.
+    // Yani `?is_customer=true` sessizce is_customer = FALSE olan satırları
+    // döndürürdü — hata değil, ters veri. Bunu ayrıştırma katmanında kesiyoruz.
+    //
+    // Bedeli: değeri harfiyen 'true'/'false' olan bir METİN kolonu eq ile
+    // aranamaz. Bu şemada öyle bir kolon yok; gerekirse `__like` kullanılır.
+    else if ((op === 'eq' || op === 'neq') && (raw === 'true' || raw === 'false')) {
+      value = raw === 'true';
+    }
     out.push({ column, op, value });
   }
   return out;

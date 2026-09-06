@@ -26,7 +26,9 @@ declare
   v_tbl        text := format('%I.%I', p_schema, p_table);
   v_tenant     text := 'tenant_id = (select core.current_tenant_id())';
   v_branch     text := '';
-  v_support    text := '(select core.is_support_session())';
+  -- Destek erişimi KİRACIYA DARALTILMIŞTIR. Koşulsuz baypas olsaydı destek
+  -- modundaki platform yöneticisi tüm kiracıları birden görürdü.
+  v_support    text := 'tenant_id = (select core.support_tenant_id())';
   v_read       text;
   v_create     text;
   v_write      text;
@@ -96,6 +98,34 @@ $fn$;
 comment on function core.apply_rls(text,text,text,boolean,boolean,boolean) is
   'Bir modül tablosuna standart kiracı+şube+kayıt kuralı RLS politikalarını ve zorunlu indeksleri uygular.';
 
+-- Hangi tablonun hangi parametrelerle kaydedildiğini tutar.
+-- Politika üretici sonradan değiştiğinde (ör. destek erişiminin daraltılması)
+-- tüm modül tablolarına tek çağrıyla yeniden uygulanabilsin diye gerekli.
+create table if not exists core.rls_tables (
+  schema_name  text not null,
+  table_name   text not null,
+  entity       text not null,
+  has_branch   boolean not null,
+  has_owner    boolean not null,
+  soft_delete  boolean not null,
+  primary key (schema_name, table_name)
+);
+
+create or replace function core.reapply_rls_all()
+returns integer
+language plpgsql
+as $fn$
+declare r record; n integer := 0;
+begin
+  for r in select * from core.rls_tables order by schema_name, table_name loop
+    perform core.apply_rls(r.schema_name, r.table_name, r.entity,
+                           r.has_branch, r.has_owner, r.soft_delete);
+    n := n + 1;
+  end loop;
+  return n;
+end;
+$fn$;
+
 -- Tabloyu tek çağrıyla "kiracıya ait tablo" hâline getiren kısayol:
 -- varsayılan tetikleyiciler + RLS + denetim izi birlikte.
 create or replace function core.register_tenant_table(
@@ -111,6 +141,12 @@ returns void
 language plpgsql
 as $fn$
 begin
+  insert into core.rls_tables (schema_name, table_name, entity, has_branch, has_owner, soft_delete)
+  values (p_schema, p_table, p_entity, p_has_branch, p_has_owner, p_soft_delete)
+  on conflict (schema_name, table_name) do update
+    set entity = excluded.entity, has_branch = excluded.has_branch,
+        has_owner = excluded.has_owner, soft_delete = excluded.soft_delete;
+
   perform core.attach_updated_at(p_schema, p_table);
   perform core.attach_row_defaults(p_schema, p_table);
   perform core.apply_rls(p_schema, p_table, p_entity, p_has_branch, p_has_owner, p_soft_delete);

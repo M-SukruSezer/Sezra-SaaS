@@ -1,71 +1,153 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { useItem, useList } from '../ui/useResource';
-import { Card, Empty, ErrorBox, PageHead, SearchInput, StatusBadge, Toolbar } from '../ui';
-import { money, date, num } from '../i18n';
+import { useItem } from '../ui/useResource';
+import { Coins, FileText, GitBranch, Lock, Percent } from 'lucide-react';
+import { Card, Empty, ErrorBox, PageHead, Stat, StatusBadge } from '../ui';
+import { ResourceList, type Kolon } from '../ui/ResourceList';
+import {
+  DURUM_BELGE, DURUM_SIPARIS, kolonAd, kolonBelgeNo, kolonCari, kolonDurum,
+  kolonGecen, kolonPara, kolonSayi, kolonTarih,
+} from '../ui/kolonlar';
+import { money, num } from '../i18n';
 import { useSession } from '../api/session';
 import type { SalesDocument } from '../api/types';
 
-function DocumentTable({ rows, base, dateKey }: {
-  rows: SalesDocument[]; base: string; dateKey: 'issue_date' | 'order_date';
-}) {
-  return (
-    <div className="tbl-wrap">
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th>No</th><th>Cari</th><th>Tarih</th><th>Durum</th><th className="r">Kalem</th>
-            <th className="r">Ara toplam</th><th className="r">KDV</th><th className="r">Toplam</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((d) => (
-            <tr key={d.id}>
-              <td><Link to={`${base}/${d.id}`}><strong>{d.number ?? 'Taslak'}</strong></Link></td>
-              <td>{d.partner_name ?? '—'}</td>
-              <td>{date(d[dateKey])}</td>
-              <td><StatusBadge status={d.status} /></td>
-              <td className="r muted">{(d as { line_count?: string }).line_count ?? '—'}</td>
-              <td className="r">{money(d.subtotal, d.currency)}</td>
-              <td className="r">{money(d.tax_total, d.currency)}</td>
-              <td className="r"><strong>{money(d.total, d.currency)}</strong></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {rows.length === 0 && <Empty />}
-    </div>
-  );
+/** Belge listelerinin ortak toplamı: para alanları string gelir. */
+const topla = (rows: SalesDocument[]) => rows.reduce((t, d) => t + Number(d.total || 0), 0);
+
+/**
+ * Teklif ve sipariş aynı belge yapısını paylaşır, dolayısıyla kolonları da
+ * paylaşır. Değişen tek şey tarih alanının adı ve durum sözlüğü.
+ */
+function belgeKolonlari(
+  tarihAlani: string, tarihBaslik: string,
+  durumlar: { deger: string; etiket: string }[],
+): Kolon<SalesDocument>[] {
+  return [
+    kolonBelgeNo<SalesDocument>('No'),
+    kolonCari<SalesDocument>(),
+    kolonTarih<SalesDocument>(tarihAlani, tarihBaslik),
+    kolonDurum<SalesDocument>(durumlar),
+    kolonSayi<SalesDocument>('line_count', 'Kalem', { basamak: 0 }),
+    kolonPara<SalesDocument>('subtotal', 'Ara toplam'),
+    kolonPara<SalesDocument>('tax_total', 'KDV'),
+    kolonPara<SalesDocument>('withholding_total', 'Tevkifat', { gizli: true }),
+    kolonPara<SalesDocument>('total', 'Toplam', { kalin: true }),
+    kolonAd<SalesDocument>('owner_name', 'Sahibi', { gizli: true }),
+    kolonGecen<SalesDocument>('created_at', 'Eklenme', false),
+  ];
 }
 
+const BELGE_YETENEK = [
+  { simge: FileText, etiket: 'Kalem', deger: 'Ürün · iskonto · KDV' },
+  { simge: Coins, etiket: 'Çoklu para', deger: 'TRY · EUR · USD' },
+  { simge: Percent, etiket: 'Tevkifat', deger: 'Oranlı hesaplanır' },
+  { simge: Lock, etiket: 'Kilit', deger: 'Gönderilen belge donar' },
+  { simge: GitBranch, etiket: 'Akış', deger: 'Teklif → sipariş → fatura' },
+];
+
+/**
+ * Teklifler.
+ *
+ * BAŞ RAKAM MÜŞTERİDE BEKLEYEN TUTARDIR (taslak + gönderilmiş). Kapanmış
+ * tekliflerin toplamı geçmiştir; bu ekranda aranan, hâlâ cevap bekleyen
+ * paradır. Dönüşüm oranı yanında durur çünkü bekleyen tutarın ne kadarının
+ * gerçeğe döndüğünü ancak o söyler.
+ */
 export function QuotationList() {
-  const [q, setQ] = useState('');
-  const list = useList<SalesDocument>('/crm/quotations', { q, limit: 100 });
   return (
-    <>
-      <PageHead title="Teklifler" subtitle={`${list.total} kayıt`} />
-      <Toolbar><SearchInput value={q} onChange={setQ} placeholder="Teklif no, not…" /></Toolbar>
-      <ErrorBox error={list.error} />
-      <Card padded={false}>
-        <DocumentTable rows={list.data} base="/crm/quotations" dateKey="issue_date" />
-      </Card>
-    </>
+    <ResourceList<SalesDocument>
+      kicker="CRM · Teklifler"
+      baslik="Teklifler"
+      altBaslik="Müşteriye gönderilen fiyat teklifleri ve akıbetleri."
+      yol="/crm/quotations"
+      aramaYer="Teklif no, cari, not…"
+      varsayilanSirala={{ kolon: 'issue_date', yon: 'desc' }}
+      kolonlar={belgeKolonlari('issue_date', 'Tarih', DURUM_BELGE)}
+      satirYolu={(d) => `/crm/quotations/${d.id}`}
+      yazmaIzni="crm.quotation.create"
+      silmeIzni="crm.quotation.delete.all"
+      yetenekler={BELGE_YETENEK}
+      sayimlar={(t, rows) => [
+        { deger: t, etiket: 'teklif' },
+        { deger: rows.filter((d) => d.status === 'sent').length, etiket: 'gönderildi' },
+        { deger: money(topla(rows), rows[0]?.currency ?? 'TRY'), etiket: 'listelenen tutar' },
+      ]}
+      gostergeler={(rows) => {
+        if (rows.length === 0) return null;
+        const pb = rows[0]?.currency ?? 'TRY';
+        const bekleyen = rows.filter((d) => d.status === 'draft' || d.status === 'sent');
+        const onaylanan = rows.filter((d) => d.status === 'accepted');
+        const kapanan = rows.filter((d) => ['accepted', 'rejected', 'expired', 'cancelled'].includes(d.status));
+        const donusum = kapanan.length === 0 ? null
+          : Math.round((onaylanan.length / kapanan.length) * 100);
+        return (
+          <div className="grid grid-4">
+            <Stat label="Müşteride bekleyen" value={money(topla(bekleyen), pb)}
+                  hint={bekleyen.length === 0 ? 'Bekleyen teklif yok' : `${bekleyen.length} teklif`} />
+            <Stat label="Onaylanan" value={onaylanan.length} hint={money(topla(onaylanan), pb)} />
+            <Stat label="Dönüşüm oranı" value={donusum === null ? '—' : `%${donusum}`}
+                  hint={kapanan.length === 0 ? 'Kapanmış teklif yok' : `${kapanan.length} kapanmış teklif`} />
+            <Stat label="Listelenen toplam" value={money(topla(rows), pb)} hint={`${rows.length} teklif`} />
+          </div>
+        );
+      }}
+      bosBaslik="Henüz teklif yok"
+      bosMetin="Teklif bir fırsattan doğar: fırsatı açıp kalemleri girdiğinizde teklif numaralanır, gönderildiğinde müşteriye kilitlenir ve onaylandığında kendiliğinden satış siparişine dönüşür."
+      dipnot={<span>Gönderilen teklifin kalemleri kilitlenir; değişiklik yeni teklif gerektirir.</span>}
+    />
   );
 }
 
+/**
+ * Satış siparişleri.
+ *
+ * BAŞ RAKAM FATURALANMAYI BEKLEYEN TUTARDIR (onaylanan + teslim edilen).
+ * Sipariş ekranına bakan kişi ciroyu değil, "onayladık ama daha paraya
+ * dönmedi" kısmını arar -- teklifteki bekleyen tutarın sipariş tarafındaki
+ * karşılığı budur.
+ */
 export function OrderList() {
-  const [q, setQ] = useState('');
-  const list = useList<SalesDocument>('/crm/sale-orders', { q, limit: 100 });
   return (
-    <>
-      <PageHead title="Satış Siparişleri" subtitle={`${list.total} kayıt`} />
-      <Toolbar><SearchInput value={q} onChange={setQ} placeholder="Sipariş no, not…" /></Toolbar>
-      <ErrorBox error={list.error} />
-      <Card padded={false}>
-        <DocumentTable rows={list.data} base="/crm/orders" dateKey="order_date" />
-      </Card>
-    </>
+    <ResourceList<SalesDocument>
+      kicker="CRM · Satış Siparişleri"
+      baslik="Satış Siparişleri"
+      altBaslik="Onaylanan siparişler, teslimat ve faturalama durumu."
+      yol="/crm/sale-orders"
+      aramaYer="Sipariş no, cari, not…"
+      varsayilanSirala={{ kolon: 'order_date', yon: 'desc' }}
+      kolonlar={belgeKolonlari('order_date', 'Tarih', DURUM_SIPARIS)}
+      satirYolu={(d) => `/crm/orders/${d.id}`}
+      yazmaIzni="crm.sale_order.create"
+      silmeIzni="crm.sale_order.delete.all"
+      yetenekler={BELGE_YETENEK}
+      sayimlar={(t, rows) => [
+        { deger: t, etiket: 'sipariş' },
+        { deger: rows.filter((d) => d.status === 'confirmed').length, etiket: 'onaylı' },
+        { deger: money(topla(rows), rows[0]?.currency ?? 'TRY'), etiket: 'listelenen tutar' },
+      ]}
+      gostergeler={(rows) => {
+        if (rows.length === 0) return null;
+        const pb = rows[0]?.currency ?? 'TRY';
+        const bekleyen = rows.filter((d) => ['confirmed', 'delivered'].includes(d.status));
+        const taslak = rows.filter((d) => d.status === 'draft');
+        const faturalanan = rows.filter((d) => d.status === 'invoiced');
+        return (
+          <div className="grid grid-4">
+            <Stat label="Faturalanmayı bekleyen" value={money(topla(bekleyen), pb)}
+                  hint={bekleyen.length === 0 ? 'Bekleyen sipariş yok' : `${bekleyen.length} sipariş`} />
+            <Stat label="Faturalandı" value={faturalanan.length} hint={money(topla(faturalanan), pb)} />
+            <Stat label="Taslak" value={taslak.length}
+                  hint={taslak.length === 0 ? 'Taslak yok' : 'Henüz onaylanmadı'} />
+            <Stat label="Listelenen toplam" value={money(topla(rows), pb)} hint={`${rows.length} sipariş`} />
+          </div>
+        );
+      }}
+      bosBaslik="Henüz sipariş yok"
+      bosMetin="Satış siparişi onaylanan bir tekliften doğar. Siparişi onayladığınızda stok rezerve edilir ve muhasebe tarafında fatura taslağı kendiliğinden oluşur -- iki modül birbirini olay üzerinden duyar."
+      dipnot={<span>Sipariş onayı stok rezervini ve fatura taslağını tetikler.</span>}
+    />
   );
 }
 

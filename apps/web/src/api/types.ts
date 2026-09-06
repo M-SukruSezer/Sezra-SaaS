@@ -1,5 +1,12 @@
 export interface Me {
-  user: { id: string; email: string; full_name: string | null; is_platform_admin: boolean };
+  /** Destek oturumu etkin mi: platform yöneticisi bir kiracının verisine bakıyor. */
+  support_session?: boolean;
+  user: {
+    id: string; email: string; full_name: string | null;
+    phone: string | null; avatar_url: string | null;
+    locale: string; timezone: string;
+    is_platform_admin: boolean;
+  };
   tenant: { id: string; name: string; slug: string; currency: string } | null;
   memberships: { tenant_id: string; name: string; slug: string; is_default: boolean }[];
   branches: { id: string; code: string; name: string; is_headquarter: boolean }[];
@@ -7,6 +14,26 @@ export interface Me {
   modules: { code: string; name: string }[];
   permissions: string[];
   supportMode: boolean;
+  /**
+   * Portal oturumu: dolu ise bu kullanıcı bir MÜŞTERİ, personel değil.
+   * Hiçbir izni ve hiçbir modülü yoktur; personel kabuğu ona boş bir menü
+   * gösterirdi. Kimin adına girildiğini sunucu söyler.
+   */
+  portal: { partner_id: string; partner_name: string; partner_code: string | null } | null;
+}
+
+/**
+ * `/me` ucunun HAM yanıtı.
+ *
+ * `user` null olabilir: kimlik sağlayıcısında hesabı olan ama henüz hiçbir
+ * kiracıya bağlanmamış kişi -- portal davetini kabul etmek üzere gelen
+ * müşteri tam olarak bu durumdadır. Uygulamanın geri kalanı profilsiz bir
+ * oturumu hiç görmez (oturum katmanı onu ayrı bir durum olarak tutar), bu
+ * yüzden `Me` içinde `user` dolu kalır ve yirmi ekranda gereksiz `?.`
+ * kontrolü doğmaz.
+ */
+export interface MeYanit extends Omit<Me, 'user'> {
+  user: Me['user'] | null;
 }
 
 export interface Lead {
@@ -17,6 +44,9 @@ export interface Lead {
   status: 'open' | 'won' | 'lost'; lost_reason_id: string | null;
   expected_close_date: string | null; owner_id: string | null;
   notes: string | null; created_at: string; updated_at: string;
+  // v_lead_list çözümlenmiş adları da taşır.
+  partner_name?: string | null; owner_name?: string | null;
+  stage_name?: string | null; branch_name?: string | null; lost_reason_name?: string | null;
 }
 
 export interface BoardStage {
@@ -37,6 +67,10 @@ export interface Partner {
   tax_office: string | null; tax_no: string | null; email: string | null; phone: string | null;
   city: string | null; district: string | null; address: string | null;
   payment_term_days: number; owner_id: string | null; is_active: boolean; branch_id: string | null;
+  // v_partner_list ayrıca çözümlenmiş adları taşır: liste ekranı kimlik
+  // göstermek zorunda kalmasın diye.
+  created_at?: string; owner_name?: string | null; branch_name?: string | null;
+  is_company?: boolean;
 }
 
 export interface DocumentLine {

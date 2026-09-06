@@ -1,8 +1,4 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_API_BASE?: string;
-}
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
+/** Derleme sırasında package.json'dan enjekte edilir (vite.config.ts). */
+declare const __APP_VERSION__: string;

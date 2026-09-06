@@ -1,5 +1,5 @@
 import { useList } from '../ui/useResource';
-import { Card, Empty, ErrorBox, PageHead } from '../ui';
+import { Card, Empty, EmptyPage, ErrorBox, PageFoot, PageHead, Stat } from '../ui';
 import { money, date } from '../i18n';
 import { useSession } from '../api/session';
 
@@ -16,12 +16,50 @@ export function Reports() {
   const reps = useList<RepRow>('/crm/reports/rep-performance');
   const lost = useList<LostRow>('/crm/reports/lost-reasons');
 
+  // Baş rakam KAZANILAN CİRO: satış raporunun tek özet cümlesi. Kaçan ciro
+  // hemen yanında durur çünkü ikisi birlikte okunmadan kazanma oranının ne
+  // anlama geldiği belli olmaz.
+  const kazanilan = reps.data.reduce((t, r) => t + Number(r.won_revenue || 0), 0);
+  const huni      = reps.data.reduce((t, r) => t + Number(r.pipeline_revenue || 0), 0);
+  const kacan     = lost.data.reduce((t, r) => t + Number(r.lost_revenue || 0), 0);
+  const kazanildi = reps.data.reduce((t, r) => t + Number(r.won_count || 0), 0);
+  const kaybedildi = reps.data.reduce((t, r) => t + Number(r.lost_count || 0), 0);
+  const sonuclanan = kazanildi + kaybedildi;
+  const oran = sonuclanan === 0 ? null : Math.round((kazanildi / sonuclanan) * 100);
+
+  if (!(reps.loading || lost.loading) && reps.data.length === 0 && lost.data.length === 0) {
+    return (
+      <>
+        <PageHead kicker="CRM" title="CRM Raporları"
+                  subtitle="Temsilci performansı ve kayıp sebebi analizi." />
+        <ErrorBox error={reps.error ?? lost.error} />
+        <EmptyPage title="Rapor için yeterli veri yok">
+          Raporlar kapanmış fırsatlardan beslenir. İlk fırsatlar kazanıldıkça
+          ya da kaybedildikçe temsilci karnesi ve kayıp sebebi dağılımı burada
+          oluşur.
+        </EmptyPage>
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHead title="CRM Raporları" subtitle="Yalnızca erişebildiğiniz şube ve kayıtlar" />
+      <PageHead kicker="CRM" title="CRM Raporları"
+                subtitle="Temsilci performansı ve kayıp sebebi analizi." />
       <ErrorBox error={reps.error ?? lost.error} />
 
-      <div className="grid" style={{ gap: 24 }}>
+      <div className="grid grid-4">
+        <Stat label="Kazanılan ciro" value={money(kazanilan, currency)}
+              hint={`${kazanildi} kazanılan fırsat`} />
+        <Stat label="Kaçan ciro" value={money(kacan, currency)}
+              hint={kaybedildi === 0 ? 'Kaybedilen fırsat yok' : `${kaybedildi} kaybedilen fırsat`} />
+        <Stat label="Kazanma oranı" value={oran === null ? '—' : `%${oran}`}
+              hint={sonuclanan === 0 ? 'Sonuçlanan fırsat yok' : `${sonuclanan} sonuçlanan fırsat`} />
+        <Stat label="Açık huni" value={money(huni, currency)}
+              hint={`${reps.data.length} temsilci`} />
+      </div>
+
+      <div className="grid-sections">
         <Card title="Temsilci performansı" padded={false}>
           <div className="tbl-wrap">
             <table className="tbl">
@@ -47,7 +85,9 @@ export function Reports() {
                 ))}
               </tbody>
             </table>
-            {!reps.loading && reps.data.length === 0 && <Empty />}
+            {!reps.loading && reps.data.length === 0 && (
+              <Empty title="Veri yok">Bu kırılımda temsilci performansı oluşmamış.</Empty>
+            )}
           </div>
         </Card>
 
@@ -76,10 +116,17 @@ export function Reports() {
                 ))}
               </tbody>
             </table>
-            {!lost.loading && lost.data.length === 0 && <Empty />}
+            {!lost.loading && lost.data.length === 0 && (
+              <Empty title="Veri yok">Henüz kaybedilen fırsat kaydı yok.</Empty>
+            )}
           </div>
         </Card>
       </div>
+
+      <PageFoot>
+        <span>Rakamlar yalnızca erişebildiğiniz şube ve kayıtları kapsar (RLS).</span>
+        <span>Kayıp sebepleri kiracıya özel tanımlanır; dağılım kaçan ciroya göredir.</span>
+      </PageFoot>
     </>
   );
 }

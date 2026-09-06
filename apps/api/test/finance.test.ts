@@ -8,6 +8,10 @@
 process.env.AUTH_MODE ??= 'dev';
 process.env.NODE_ENV = 'test';
 
+// Ortam degiskenlerini core'dan ONCE yukle: core/db.ts modul seviyesinde
+// DATABASE_URL okur. Gercek ortam degiskeni .env'i ezdigi icin test
+// betiklerinin satir ici DATABASE_URL'i gecerli kalir.
+import '../src/env.ts';
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import type { FastifyInstance } from 'fastify';
@@ -30,15 +34,20 @@ const get = async (url: string, user: string) =>
 
 before(async () => {
   const core = await import('@sezra/core');
-  const { modules } = await import('../src/modules.js');
+  const { modules } = await import('../src/modules.ts');
   closeDb = core.closeDb;
   app = await core.createApp({ modules, logger: false });
   await app.ready();
 
-  // Kuyruktaki olayları gerçek worker ile işle
+  // Kuyruktaki olayları gerçek worker ile işle.
+  //
+  // İŞLENEN SAYISINA BAKILMAZ: geliştirici `npm run dev` ile API'yi açık
+  // bırakmışsa oradaki EventWorker kuyruğu çoktan tüketmiş olur ve sayı sıfır
+  // gelir. Önemli olan kuyruğun BOŞALMASI, bu çalıştırmada kaç olay işlendiği
+  // değil — olayların sonucu zaten aşağıdaki testlerde doğrulanıyor
+  // (03_finance.sql'deki aynı not).
   const worker = new core.EventWorker();
-  const processed = await worker.drain();
-  assert.ok(processed >= 1, `en az bir olay işlenmeliydi, işlenen: ${processed}`);
+  await worker.drain();
 });
 
 after(async () => {
@@ -79,7 +88,7 @@ describe('olay -> fatura', () => {
     assert.equal(inv.status, 'draft');
     assert.equal(inv.kind, 'sale');
     assert.equal(Number(inv.total), 140183);
-    assert.equal(inv.partner_name, 'Düzce Üniversitesi Kantin İşl.');
+    assert.equal(inv.partner_name, 'Alfa Sanayi Ltd. Şti.');
     assert.equal(Number(inv.line_count), 2);
   });
 
@@ -231,7 +240,7 @@ describe('e-Fatura', () => {
 });
 
 describe('izolasyon', () => {
-  test('başka kiracı Colombia muhasebesini göremez', async () => {
+  test('başka kiracı Örnek Ticaret muhasebesini göremez', async () => {
     const inv = await get('/finance/invoices', USERS.rakip);
     assert.equal(inv.meta.total, 0);
     const tb = await get('/finance/reports/trial-balance', USERS.rakip);

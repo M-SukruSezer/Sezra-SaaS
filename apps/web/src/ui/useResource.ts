@@ -10,6 +10,10 @@ export function useList<T>(path: string, params: Record<string, string | number 
   const key = JSON.stringify(params);
 
   const reload = useCallback(async () => {
+    // Bos yol = "simdi istemeyin": cagiran taraf listeyi kosullu kullaniyor
+    // (kapali bir panel, secilmemis bir kayit). Istek atilsaydi sunucuya
+    // anlamsiz bir istek giderdi ve baglanti gostergesi bosuna kirmiziya donerdi.
+    if (!path) { setData([]); setTotal(0); setLoading(false); setError(null); return; }
     setLoading(true); setError(null);
     try {
       const res: ListResponse<T> = await api.list<T>(path, JSON.parse(key));

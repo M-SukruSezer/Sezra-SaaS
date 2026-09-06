@@ -45,12 +45,70 @@ function headers(withBody: boolean): Record<string, string> {
   return h;
 }
 
+/**
+ * Bağlantı durumu.
+ *
+ * GERÇEK İSTEKLERDEN TÜRETİLİR, ayrı bir yoklama isteğinden değil: durum
+ * çubuğu "sunucuya ulaşabiliyor muyum" sorusunu, kullanıcının zaten yaptığı
+ * çağrıların sonucuna bakarak yanıtlar. Ayrı bir sağlık yoklaması, hem
+ * gereksiz trafik üretir hem de asıl isteklerin başarısız olduğu bir anda
+ * "çevrimiçi" demeye devam edebilir.
+ *
+ * `navigator.onLine` tek başına yetmez: tarayıcı ağa bağlı ama API kapalı
+ * olabilir. O yüzden yalnızca "çevrimdışı" tarafında dikkate alınır.
+ */
+export interface BaglantiDurumu {
+  /** Son isteğin sonucu. Hiç istek yapılmadıysa 'bilinmiyor'. */
+  durum: 'cevrimici' | 'cevrimdisi' | 'bilinmiyor';
+  /** Son BAŞARILI yanıtın zamanı. */
+  sonBasari: Date | null;
+  /** Ulaşılamama sebebi (varsa). */
+  sonHata: string | null;
+}
+
+let baglanti: BaglantiDurumu = { durum: 'bilinmiyor', sonBasari: null, sonHata: null };
+const dinleyiciler = new Set<(d: BaglantiDurumu) => void>();
+
+function baglantiyiBildir(next: BaglantiDurumu): void {
+  baglanti = next;
+  for (const fn of dinleyiciler) fn(next);
+}
+
+export function baglantiDurumu(): BaglantiDurumu { return baglanti; }
+
+export function baglantiDinle(fn: (d: BaglantiDurumu) => void): () => void {
+  dinleyiciler.add(fn);
+  return () => { dinleyiciler.delete(fn); };
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: headers(body !== undefined),
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: headers(body !== undefined),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (err) {
+    // Ağ seviyesinde düştü: sunucuya hiç ulaşılamadı.
+    baglantiyiBildir({
+      durum: 'cevrimdisi',
+      sonBasari: baglanti.sonBasari,
+      sonHata: err instanceof Error ? err.message : 'Ağ hatası',
+    });
+    throw err;
+  }
+
+  // 5xx ve proxy hataları da "ulaşılamıyor" sayılır; 4xx ise sunucunun
+  // çalıştığını KANITLAR (isteği anlayıp reddetmiştir), o yüzden çevrimiçidir.
+  if (res.status >= 500) {
+    baglantiyiBildir({
+      durum: 'cevrimdisi', sonBasari: baglanti.sonBasari,
+      sonHata: `Sunucu ${res.status}`,
+    });
+  } else {
+    baglantiyiBildir({ durum: 'cevrimici', sonBasari: new Date(), sonHata: null });
+  }
 
   if (res.status === 204) return undefined as T;
 

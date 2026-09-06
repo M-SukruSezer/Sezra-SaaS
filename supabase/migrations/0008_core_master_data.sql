@@ -66,7 +66,7 @@ create table if not exists core.product_categories (
   parent_id   uuid references core.product_categories(id) on delete set null,
   code        text,
   name        text not null,
-  path        text,                              -- 'İçecek / Sıcak / Espresso Bazlı'
+  path        text,                              -- 'Hammadde / Metal / Sac'
   created_by  uuid references core.users(id),
   updated_by  uuid references core.users(id),
   created_at  timestamptz not null default now(),

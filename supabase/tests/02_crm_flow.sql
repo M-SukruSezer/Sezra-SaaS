@@ -139,20 +139,38 @@ select public.t_assert(
   exists (select 1 from core.events where topic = 'crm.lead.won'),
   'crm.lead.won olayı yayınlandı');
 
--- Muhasebe modülü sales.order.confirmed'a abone: tam olarak bir teslimat satırı
--- düşmeli. Abonesi olmayan olaylar (crm.lead.won) için hiç satır olmamalı.
+-- Fan-out doğrulaması: teslimat sayısı ABONE SAYISINA eşit olmalı.
+-- Sayıyı sabitlemiyoruz — yeni bir modül bu olaya abone olduğunda (Faz 2'de
+-- Envanter tam olarak bunu yaptı) test kırılmamalı; kırılması gereken durum
+-- fan-out'un abone sayısıyla UYUŞMAMASIDIR.
 select public.t_assert(
   (select count(*) from core.event_deliveries d
     join core.events e on e.id = d.event_id
-   where e.topic = 'sales.order.confirmed') = 1,
-  'sales.order.confirmed için tek teslimat kuyruğa alındı',
-  (select count(*)::text from core.event_deliveries));
+   where e.topic = 'sales.order.confirmed')
+  = (select count(*) from core.event_subscriptions s
+      join core.tenant_modules tm on tm.module_code = s.module_code and tm.enabled
+      join core.tenants t on t.id = tm.tenant_id and t.slug = 'ornek-ticaret'
+     where s.topic = 'sales.order.confirmed' and s.is_active),
+  'sales.order.confirmed her aktif aboneye birer teslimat üretti',
+  (select count(*)::text from core.event_deliveries d
+     join core.events e on e.id = d.event_id where e.topic = 'sales.order.confirmed'));
 
+-- Fan-out kuralı: teslimat sayısı AKTİF ABONE sayısına eşit olmalı — abone
+-- yoksa sıfır. Sabit sayı yazmıyoruz: crm.lead.won Faz 1'de abonesizdi, Faz 4'te
+-- Proje modülü ona abone oldu ve CRM'de tek satır değişmedi. Test bunu
+-- kırılmadan karşılamalı; kırılması gereken tek durum fan-out'un abone
+-- sayısıyla UYUŞMAMASIDIR.
 select public.t_assert(
   (select count(*) from core.event_deliveries d
     join core.events e on e.id = d.event_id
-   where e.topic = 'crm.lead.won') = 0,
-  'Abonesi olmayan olay kuyruğa hiç girmez (fan-out doğru)');
+   where e.topic = 'crm.lead.won')
+  = (select count(*) from core.event_subscriptions s
+      join core.tenant_modules tm on tm.module_code = s.module_code and tm.enabled
+      join core.tenants t on t.id = tm.tenant_id and t.slug = 'ornek-ticaret'
+     where s.topic = 'crm.lead.won' and s.is_active),
+  'crm.lead.won her aktif aboneye birer teslimat üretti (abone yoksa sıfır)',
+  (select count(*)::text from core.event_deliveries d
+     join core.events e on e.id = d.event_id where e.topic = 'crm.lead.won'));
 
 \echo ''
 \echo '=== 6. DENETİM İZİ ==='
