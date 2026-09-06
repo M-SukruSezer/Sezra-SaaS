@@ -111,13 +111,21 @@ select public.t_assert(
 -- Kasa internetsizken fiş id''sini KENDİ üretir
 select gen_random_uuid() as offline_id \gset
 
+-- Cihaz saati: "2 saat önce", ama asla bugünün başından (yerel gece yarısı)
+-- geriye taşmadan. NEDEN clamp: pos.v_daily_sales fişleri ordered_at::date ile
+-- günlere ayırır, alttaki sepet-ortalaması testi de "sale_date = current_date"
+-- ile seçer. Sabit "now() - 2 saat" ifadesi yerel saat 00:00-02:00 arasında
+-- düne düşer; fiş bugünün kovasından çıkar ve ortalama 142,50 yerine 95,00
+-- gelir. Testin sonucu koşturulduğu saate bağlı olamaz.
+select greatest(now() - interval '2 hours', date_trunc('day', now())) as offline_ts \gset
+
 select pos.sync_orders(jsonb_build_array(jsonb_build_object(
   'id', :'offline_id',
   'branch_id', :'duzce',
   'session_id', :'ses',
   'terminal_id', :'term',
   'client_seq', 1001,
-  'ordered_at', (now() - interval '2 hours')::text,
+  'ordered_at', :'offline_ts',
   'status', 'paid',
   'lines', jsonb_build_array(jsonb_build_object(
      'product_id', :'urun', 'sku', 'POS-URN', 'name', 'Standart Ürün 102',
@@ -134,9 +142,12 @@ select public.t_assert(
   and (select total from pos.orders where id = :'offline_id') = 190.00,
   'Offline fiş kapatıldı, toplam doğru (2 × 95)');
 
+-- Sunucu, kasanın gönderdiği ordered_at değerini kendi now()'u ile EZMEDİ.
+-- (Eskiden "< now() - 1 saat" idi; o eşik de duvar saatine bağlıydı. Gönderilen
+-- değerle birebir eşitlik hem duvar saatinden bağımsız hem de asıl niyet.)
 select public.t_assert(
-  (select ordered_at from pos.orders where id = :'offline_id') < now() - interval '1 hour',
-  'Cihaz saati korundu — sunucuya geç ulaşan fiş "şimdi" satılmış sayılmadı');
+  (select ordered_at from pos.orders where id = :'offline_id') = :'offline_ts'::timestamptz,
+  'Cihaz saati korundu — sunucu gönderilen ordered_at değerini kendi now() ile ezmedi');
 
 -- AYNI PAKETİ TEKRAR GÖNDER
 select pos.sync_orders(jsonb_build_array(jsonb_build_object(
