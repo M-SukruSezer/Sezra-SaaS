@@ -12,7 +12,10 @@ insert into core.users (id, email, full_name, is_platform_admin) values
   ('22222222-2222-2222-2222-222222222222', 'admin@ornek.test',    'Merve Yıldız',      false),
   ('33333333-3333-3333-3333-333333333333', 'duzce.satis@ornek.test','Ali Kaya',        false),
   ('44444444-4444-4444-4444-444444444444', 'zonguldak.mudur@ornek.test','Deniz Aras',  false),
-  ('55555555-5555-5555-5555-555555555555', 'admin@rakipticaret.test',   'Rakip Yönetici',    false)
+  ('55555555-5555-5555-5555-555555555555', 'admin@rakipticaret.test',   'Rakip Yönetici',    false),
+  -- Ana platform yöneticisi. Sezra (Platform) demo kimliğinden ayrıdır:
+  -- bu satır kurulumu yapan gerçek kişiyi temsil eder.
+  ('66666666-6666-6666-6666-666666666666', 'm.sukrusezer@gmail.com', 'M. Şükrü Sezer',    true)
 on conflict (id) do nothing;
 
 -- --- Kiracılar ---------------------------------------------------------------
@@ -24,6 +27,7 @@ declare
   v_duzce    uuid;
   v_ms_ali   uuid;
   v_ms_deniz uuid;
+  v_ms_admin uuid;
   v_role_sales uuid;
   v_role_bm  uuid;
 begin
@@ -65,6 +69,16 @@ begin
   returning id into v_ms_deniz;
   insert into core.membership_roles (membership_id, role_id) values (v_ms_deniz, v_role_bm);
   insert into core.membership_branches (membership_id, branch_id) values (v_ms_deniz, v_zonguldak);
+
+  -- Ana platform yöneticisi: Örnek Ticaret'te şirket yöneticisi üyeliği.
+  -- Platform konsoluna erişim is_platform_admin bayrağından gelir; bu üyelik
+  -- ayrıca normal ERP ekranlarını gerçek bir kiracı bağlamında görmesi içindir.
+  -- Şube kısıtı YOKTUR (membership_branches boş = tüm şubeler).
+  insert into core.memberships (user_id, tenant_id, is_default)
+  values ('66666666-6666-6666-6666-666666666666', v_ornek, true)
+  returning id into v_ms_admin;
+  insert into core.membership_roles (membership_id, role_id)
+  select v_ms_admin, id from core.roles where tenant_id is null and code = 'tenant_admin';
 
   -- --- Ürünler ---------------------------------------------------------------
   insert into core.products (tenant_id, sku, name, kind, uom_id, sale_price, sale_tax_id)
