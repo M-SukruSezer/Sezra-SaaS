@@ -9,12 +9,14 @@ the model imitates them and emits emoji-laden output. Keeping the instruction su
 emoji-free is what actually stops emoji in generated design systems.
 
 The project CLAUDE.md states the zero-emoji rule as ABSOLUTE across every surface, so
-the docs (README.md) and the shell scripts (scripts/*.sh echo output) are scanned too —
-a checkmark in a status table or a tick in test output is the exact drift the rule bans.
-Source, tests and migrations are NOT in the default scan yet; pass them explicitly.
+the docs (README.md), the shell scripts (scripts/*.sh echo output) and the database
+layer (supabase/*.sql migrations, tests and seed) are scanned too — a checkmark in a
+status table, a tick in test output or a warning sign in a migration comment is the
+exact drift the rule bans. Application source (core/, apps/) is NOT in the default
+scan yet; pass it explicitly.
 
 Usage:
-  python3 scripts/check_no_emoji.py                      # docs + UI + taste + agent files + scripts
+  python3 scripts/check_no_emoji.py                      # docs + UI + taste + agent files + scripts + sql
   python3 scripts/check_no_emoji.py path/to/src ...
 Exit 0 = clean, 1 = an emoji/pictograph was found.
 """
@@ -24,8 +26,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 # Scan product UI (examples), the taste doctrine, the agent's instruction surface —
-# the files the model loads and imitates — PLUS the project docs and the shell scripts,
-# because the zero-emoji rule in CLAUDE.md is absolute across every surface.
+# the files the model loads and imitates — PLUS the project docs, the shell scripts
+# and the database layer (supabase/*.sql), because the zero-emoji rule in CLAUDE.md
+# is absolute across every surface.
 DEFAULT = [
     ROOT / "examples", ROOT / "taste",
     ROOT / "CLAUDE.md", ROOT / "CONTEXT.md", ROOT / "README.md",
@@ -34,9 +37,10 @@ DEFAULT = [
     ROOT / "components", ROOT / "workflows", ROOT / "content",
     ROOT / "accessibility", ROOT / "frameworks",
     ROOT / "design-systems", ROOT / "scripts", ROOT / "docs",
+    ROOT / "supabase",
 ]
 EXTS = {".md", ".mdx", ".html", ".htm", ".tsx", ".jsx", ".ts", ".js",
-        ".vue", ".svelte", ".css", ".scss", ".astro", ".json", ".mjs", ".sh"}
+        ".vue", ".svelte", ".css", ".scss", ".astro", ".json", ".mjs", ".sh", ".sql"}
 SKIP_DIRS = {"node_modules", "dist", "build", ".git", "coverage"}
 
 # Emoji + dingbat pictographs (check marks, stars, etc.). Deliberately EXCLUDES
