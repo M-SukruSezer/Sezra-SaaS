@@ -114,7 +114,7 @@ $$;
 -- -----------------------------------------------------------------------------
 -- Platform geneli seed: Türkiye 2025
 -- -----------------------------------------------------------------------------
--- ⚠ ORANLAR kanuni ve yıllar içinde sabittir (SGK %14, işsizlik %1, damga
+-- UYARI: ORANLAR kanuni ve yıllar içinde sabittir (SGK %14, işsizlik %1, damga
 --   ‰7,59 gibi). TUTARLAR ve VERGİ DİLİMLERİ her yıl değişir ve aşağıdakiler
 --   TEYİT EDİLMEMİŞ olarak işaretlidir: is_verified = false.
 --   Bir bordro dönemi doğrulanmamış sete denk gelirse hesaplanır ama
