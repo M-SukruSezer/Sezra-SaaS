@@ -21,7 +21,7 @@ import {
   SupplierPerformance,
 } from './pages/Purchasing';
 import { InventoryAlerts, StockLedger, StockOnHand } from './pages/Inventory';
-import { PlatformOverview, PlatformTenants } from './pages/Platform';
+import { PlatformAdmins, PlatformOverview, PlatformSupportGrants, PlatformTenants } from './pages/Platform';
 import {
   AccountSettings, AuditLog, Branding, CompanySettings, Definitions, ModuleAccess,
   SmsSettings, SystemSettings,
@@ -160,6 +160,8 @@ function Gate() {
         <Route path="helpdesk/:id" element={<TicketDetail />} />
         <Route path="platform" element={<PlatformOverview />} />
         <Route path="platform/tenants" element={<PlatformTenants />} />
+        <Route path="platform/admins" element={<PlatformAdmins />} />
+        <Route path="platform/support-grants" element={<PlatformSupportGrants />} />
         <Route path="settings" element={<SettingsHub />} />
         <Route path="settings/company" element={<CompanySettings />} />
         <Route path="settings/definitions" element={<Definitions />} />

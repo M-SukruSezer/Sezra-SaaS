@@ -136,6 +136,8 @@ const NAV: NavGroup[] = [
     items: [
       { to: '/platform',         label: 'Genel Bakış', simge: Gauge, platform: true },
       { to: '/platform/tenants', label: 'Kiracılar', simge: Building2,   platform: true },
+      { to: '/platform/admins',  label: 'Yöneticiler', simge: UserCog, platform: true },
+      { to: '/platform/support-grants', label: 'Destek erişimleri', simge: Shield, platform: true },
     ],
   },
   {

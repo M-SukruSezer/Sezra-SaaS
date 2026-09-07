@@ -306,4 +306,48 @@ export function registerPlatformRoutes(app: FastifyInstance): void {
       return { data: { id, revoked: true } };
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Platform yöneticisi yönetimi (T-021) — yetki yükseltme yüzeyi
+  // ---------------------------------------------------------------------------
+  //
+  // Yetki kontrolü burada DEĞİL: core.set_platform_admin / grant_platform_admin
+  // / list_platform_admin(s|_events) hepsi ilk satırda platform_guard() çağırır
+  // (42501 -> 403). Kilitlenme kuralı (kendini indirme yasak; son etkin
+  // yönetici korunur) SQL'de zorunlu; bkz. migration 1140.
+
+  /** Mevcut platform yöneticileri (devre dışı olanlar dâhil). */
+  app.get('/platform/admins', async (req) =>
+    run(req, async (tx) => ({
+      data: await tx`select * from core.list_platform_admins()`,
+    })));
+
+  /** Platform-yöneticisi bayrak değişikliklerinin denetim izi. */
+  app.get('/platform/admin-events', async (req) => {
+    const q = req.query as { limit?: string };
+    const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
+    return run(req, async (tx) => ({
+      data: await tx`select * from core.list_platform_admin_events(${limit})`,
+    }));
+  });
+
+  /** Bir kullanıcıyı e-postayla platform yöneticisi yapar. */
+  app.post('/platform/admins', async (req) => {
+    const b = (req.body ?? {}) as { email?: string };
+    const email = b.email?.trim();
+    if (!email) throw badRequest('email zorunlu');
+    return run(req, async (tx) => {
+      const [row] = await tx`select core.grant_platform_admin(${email}) as user_id`;
+      return { data: row };
+    });
+  });
+
+  /** Bir kullanıcının platform yöneticiliğini kaldırır. */
+  app.delete('/platform/admins/:userId', async (req) => {
+    const { userId } = req.params as { userId: string };
+    return run(req, async (tx) => {
+      await tx`select core.set_platform_admin(${userId}, false)`;
+      return { data: { user_id: userId, is_platform_admin: false } };
+    });
+  });
 }
