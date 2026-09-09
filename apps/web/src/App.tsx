@@ -40,6 +40,7 @@ import { PosReports, PosSessionList, ZReport } from './pages/Pos';
 import { ProjectDetail, ProjectList, ProjectReports } from './pages/Projects';
 import { HelpdeskReports, TicketDetail, TicketList } from './pages/Helpdesk';
 import { PortalDavet, PortalShell } from './pages/Portal';
+import { AccountantAccess, MusavirPanel, musavirErisimiVar } from './pages/Musavir';
 
 /** Davet bağlantısı: kabul ekranı bu yolda açılır. */
 const DAVET_YOLU = '/portal/davet/';
@@ -89,7 +90,12 @@ function Gate() {
   // yok" durumu onun için bir hata değil, NORMAL hâldir; konsola girer.
   const tenantless = !me.tenant;
 
-  if (tenantless && !me.user.is_platform_admin) {
+  // MALI MÜŞAVİR: kendi şirketinde üyeliği olmayan ama en az bir kiracıya
+  // müşavir erişimi olan kişi "sahipsiz hesap" değildir -- panele girer ve
+  // oradan yetkili olduğu şirketleri salt okunur görür.
+  const musavir = musavirErisimiVar(me);
+
+  if (tenantless && !me.user.is_platform_admin && !musavir) {
     // Gerçekten sahipsiz hesap. Çıkış butonu ŞART: saklanan oturum artık var
     // olmayan bir kiracıyı gösteriyorsa kullanıcı bu ekranda kilitli kalır.
     return (
@@ -106,7 +112,11 @@ function Gate() {
   return (
     <Routes>
       <Route element={<Shell />}>
-        <Route index element={tenantless ? <Navigate to="/platform" replace /> : <Dashboard />} />
+        <Route index element={
+          tenantless
+            ? <Navigate to={me.user.is_platform_admin ? '/platform' : '/musavir'} replace />
+            : <Dashboard />
+        } />
         <Route path="crm/board" element={<LeadsBoard />} />
         <Route path="crm/leads" element={<LeadList />} />
         <Route path="crm/leads/:id" element={<LeadForm />} />
@@ -162,6 +172,8 @@ function Gate() {
         <Route path="platform/tenants" element={<PlatformTenants />} />
         <Route path="platform/admins" element={<PlatformAdmins />} />
         <Route path="platform/support-grants" element={<PlatformSupportGrants />} />
+        <Route path="musavir" element={<MusavirPanel />} />
+        <Route path="settings/accountant" element={<AccountantAccess />} />
         <Route path="settings" element={<SettingsHub />} />
         <Route path="settings/company" element={<CompanySettings />} />
         <Route path="settings/definitions" element={<Definitions />} />

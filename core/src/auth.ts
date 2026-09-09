@@ -43,11 +43,12 @@ if (AUTH_MODE === 'dev' && process.env.NODE_ENV === 'production') {
 export function contextFromRequest(req: FastifyRequest): RequestContext {
   const tenantId = (req.headers['x-tenant-id'] as string | undefined)?.trim() || undefined;
   const supportMode = req.headers['x-support-mode'] === 'on';
+  const accountantMode = req.headers['x-accountant-mode'] === 'on';
 
   if (AUTH_MODE === 'dev') {
     const userId = (req.headers['x-user-id'] as string | undefined)?.trim();
     if (!userId) throw unauthorized('dev modunda x-user-id başlığı zorunlu');
-    return { userId, tenantId, supportMode, requestId: req.id };
+    return { userId, tenantId, supportMode, accountantMode, requestId: req.id };
   }
 
   const header = req.headers.authorization;
@@ -55,5 +56,5 @@ export function contextFromRequest(req: FastifyRequest): RequestContext {
   if (!JWT_SECRET) throw new Error('SUPABASE_JWT_SECRET tanımlı değil');
 
   const claims = verifyHs256(header.slice(7), JWT_SECRET);
-  return { userId: claims.sub!, tenantId, supportMode, requestId: req.id };
+  return { userId: claims.sub!, tenantId, supportMode, accountantMode, requestId: req.id };
 }
