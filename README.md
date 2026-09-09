@@ -22,15 +22,17 @@ SGK/bordro) çekirdeğe gömülü.
 | **Faz 3** — Satış Noktası (POS) | Tamam — veri katmanı + yönetici UI + **kasiyer istemcisi** testli; API katmanı çalışır, HTTP testleri şu an ekleniyor |
 | **Faz 4** — Proje & Zaman Çizelgesi | Tamam — veri katmanı + UI testli (görev ağacı, hakediş, kârlılık); API katmanı çalışır, HTTP testleri şu an ekleniyor |
 | **Faz 4** — Destek Masası | Tamam — veri katmanı + UI testli (SLA, yazışma, memnuniyet); API katmanı çalışır, HTTP testleri şu an ekleniyor |
+| **Platform** — Mali Müşavir erişimi | Tamam, testli — davet akışı, salt-okunur RLS, müşavir paneli (`/musavir`) |
+| **Platform** — Mail hesabı bağlama | Tamam, testli — IMAP/POP3 bağlantı kurulumu; şifreli kimlik bilgisi saklaması; Ayarlar > Mail Hesapları ekranı |
 
-**554 otomatik test geçiyor, 0 başarısız** — 443'ü veritabanı katmanında, 12 SQL
-paketine dağılmış (kiracı ve şube izolasyonu, kayıt kuralları, ücret ve maliyet
-gizliliği, modül aktivasyonu, KDV/tevkifat, çift taraflı kayıt, muhasebe
-değişmezliği, kapalı dönem, bordro hesabı, kademeli tedarikçi fiyatı, kısmi mal
-kabul, hareketli ortalama maliyet, negatif stok engeli, FEFO, olay yayını,
-denetim izi), 111'i API katmanında (çekirdek, CRM, Muhasebe, SMS, çek/senet,
-müşteri portalı — aynı izolasyonun HTTP üzerinden de geçerli olduğunu ve uçtan
-uca akışın çalıştığını doğrular).
+**Otomatik test sayısı** — veritabanı katmanında 16 SQL paketi (kiracı ve şube
+izolasyonu, kayıt kuralları, ücret ve maliyet gizliliği, modül aktivasyonu,
+KDV/tevkifat, çift taraflı kayıt, muhasebe değişmezliği, kapalı dönem, bordro
+hesabı, kademeli tedarikçi fiyatı, kısmi mal kabul, hareketli ortalama maliyet,
+negatif stok engeli, FEFO, olay yayını, denetim izi, mali müşavir RLS izolasyonu,
+mail hesabı gizli bilgi sızıntısı), API katmanında 7 paket / 166 test (çekirdek,
+CRM, Muhasebe, platform yönetimi, davet akışı, mali müşavir uçları, mail hesabı
+uçları).
 
 **Faz 1 tamamlandı**: CRM & Satış, Muhasebe & Finans, İnsan Kaynakları & Bordro,
 Satın Alma & Tedarikçi.
@@ -230,6 +232,42 @@ istisnası zincirinin tamamını doğrular.
 > istisnası aldı. Motor istisnayı uygular, AGİ'yi değil. AGİ yeniden yürürlüğe
 > girerse `agi_enabled` parametresi ve yeri hazır.
 
+### Mali müşavir erişimi
+
+Bir kiracı yöneticisi, dış mali müşavirini `POST /core/accountantInvite` ile davet
+eder. Müşavir daveti kabul edene kadar erişim başlamaz; kiracı başına en fazla bir
+aktif müşavir olabilir (kısmi benzersizlik indeksi, `1150_core_accountant_access`).
+
+Müşavir veriyi **yapısal olarak** salt okur: RLS politika üreticisi `musavir` terimini
+yalnızca `for select` politikasına koyar; `insert/update/delete` üreticileri bu terimi
+hiç görmez. Uygulama katmanı denetimi değil, veritabanı yapısı bunu garanti eder.
+
+Müşavir istekleri normal API uçlarına `x-tenant-id: <kiracı>` +
+`x-accountant-mode: on` başlıklarıyla gelir; `core.accountant_tenant_id()` yetkilendirmeyi
+kontrol eder. Müşavir kendi doğal kiracısını görmaya devam eder; cross-tenant sızıntı yoktur.
+
+UI: `apps/web/src/pages/Musavir.tsx` — bekleyen davetler, kiracı listesi, kiracı seçimi.
+
+### Mail hesabı bağlama
+
+Kullanıcılar IMAP veya POP3 posta kutularını `Ayarlar > Mail Hesapları` ekranından
+bağlar (`apps/web/src/pages/Settings.tsx`). OAuth sağlayıcıları (Microsoft Graph, Gmail)
+ortam değişkenleriyle yapılandırılır; yapılandırılmamış sağlayıcılar yalnızca
+`configured: false` döner — kimlik bilgisi istemciye sızmaz.
+
+**Güvenlik garantileri** (tümü kod ve testlerle doğrulanmış):
+
+- Parola/token `core/src/mail/crypto.ts` içindeki AES-256-GCM ile şifreli saklanır;
+  anahtar ortam değişkeninden gelir, veritabanı düz metni görmez.
+- `core.mail_account_list()` şifreli blobu SELECT etmez; yalnızca `has_secret: bool` döner.
+- Denetim izi scrub'lu özel tetikleyiciyle yazılır — genel `core.attach_audit`
+  kullanılmaz (o `to_jsonb(new)` ile şifreli blobu audit_log'a yazardı).
+- RLS: kullanıcı yalnızca kendi hesaplarını görür; destek modu bu tabloyu atlayamaz.
+
+`POST /core/mailAccounts/verify` ucu kaydedilmeden önce gerçek bağlantı testi
+("Bağlantıyı test et") yapar. Kapsam bu kartta yalnızca **bağlantı kurulumudur**;
+posta çekme/gönderme T-029'dadır.
+
 ## Hızlı başlangıç (yerel)
 
 Sistem PostgreSQL'i üzerinde rolleri ve veritabanını oluştur:
@@ -295,14 +333,21 @@ rolüyle bağlanmamalıdır** — bağlanırsa RLS bir güvenlik sınırı olmak
 supabase/migrations/   0001-0099 çekirdek, 0100 CRM, 0200 Muhasebe, 0300 İK,
                        0400 Satın Alma, 0500 Envanter, 0600 Kalite,
                        0700 Bakım, 0800 POS, 0900 Proje, 1000 Destek,
+                       1100-1139 destek erişimi + davet + platform yöneticisi,
+                       1150-1151 mali müşavir erişimi,
+                       1160 mail hesabı bağlama,
                        9999 yetkiler
 supabase/seed/         demo kiracı (Örnek Ticaret A.Ş.)
 supabase/tests/        RLS izolasyon ve iş akışı testleri
 core/                  çekirdek TypeScript katmanı
-                         db.ts        kiracı bağlamlı transaction
-                         resource.ts  genel CRUD üreteci
-                         events.ts    olay işleyici
-                         coreModule   cari, ürün, vergi, kullanıcı uçları
+                         db.ts              kiracı bağlamlı transaction
+                         resource.ts        genel CRUD üreteci
+                         events.ts          olay işleyici
+                         coreModule         cari, ürün, vergi, kullanıcı uçları
+                         accountantRoutes   mali müşavir davet / panel uçları
+                         mailRoutes         mail hesabı bağlama uçları
+                         mail/              adapter deseni: crypto.ts (AES-256-GCM),
+                                            types.ts (IMAP/POP3/Graph/Gmail), verify.ts
 modules/crm/           CRM API modülü
 modules/finance/       Muhasebe & Finans API modülü
 modules/hr/            İK & Bordro API modülü
