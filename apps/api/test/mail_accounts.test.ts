@@ -19,8 +19,29 @@ process.env.MAIL_SECRET_KEY ??= '0'.repeat(64);
 import '../src/env.ts';
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import type { Sql } from '@sezra/core';
+
+/** Sahte, düz metin IMAP sunucusu -- STARTTLS/LOGIN'e sabit yanıt verir. */
+function fakeImap(loginOk: boolean): Promise<{ port: number; close: () => Promise<void> }> {
+  return new Promise((resolve) => {
+    const srv = net.createServer((sock) => {
+      sock.write('* OK fake imap ready\r\n');
+      sock.on('data', (d) => {
+        const line = d.toString();
+        if (/STARTTLS/i.test(line)) sock.write('S1 NO STARTTLS yok\r\n');
+        else if (/LOGIN/i.test(line)) sock.write(loginOk ? 'A1 OK giris tamam\r\n' : 'A1 NO kimlik hatali\r\n');
+        else if (/LOGOUT/i.test(line)) { sock.write('A9 OK gorusuruz\r\n'); sock.end(); }
+      });
+      sock.on('error', () => { /* istemci soketi kapatabilir */ });
+    });
+    srv.listen(0, '127.0.0.1', () => resolve({
+      port: (srv.address() as net.AddressInfo).port,
+      close: () => new Promise<void>((r) => srv.close(() => r())),
+    }));
+  });
+}
 
 const USERS = {
   ali:   '33333333-3333-3333-3333-333333333333', // ornek üyesi (sahip)
@@ -163,5 +184,95 @@ describe('bağlı mail hesabı (HTTP + şifreleme)', () => {
   test('sahip siler (204), liste boşalır', async () => {
     assert.equal((await del(`/core/mail/accounts/${accId}`, USERS.ali)).statusCode, 204);
     assert.equal(json(await get('/core/mail/accounts', USERS.ali)).data.length, 0);
+  });
+});
+
+// ===========================================================================
+// Adım 2: IMAP/POP3 bağlantı doğrulama
+// ===========================================================================
+describe('bağlantıyı test et (IMAP/POP3)', () => {
+  let servers: { close: () => Promise<void> }[] = [];
+  let seq = 0;
+
+  const mkAccount = async (config: Record<string, unknown>) => {
+    const res = await post('/core/mail/accounts', USERS.ali, {
+      provider: 'imap', display_name: 'test', email: `ali+v${++seq}@ornek.test`,
+      config, secret: { password: 'pw' },
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    return json(res).data.id as string;
+  };
+  const verify = (id: string) => post(`/core/mail/accounts/${id}/verify`, USERS.ali);
+
+  after(async () => {
+    for (const s of servers) await s.close();
+    await sql`delete from core.mail_accounts where owner_id = ${USERS.ali}`;
+  });
+
+  test('doğru kimlik bilgisi -> verified, last_verified_at dolar', async () => {
+    const s = await fakeImap(true); servers.push(s);
+    const id = await mkAccount({ host: '127.0.0.1', port: s.port, security: 'none' });
+    const r = json(await verify(id));
+    assert.equal(r.data.status, 'verified');
+    const row = json(await get('/core/mail/accounts', USERS.ali)).data.find((x: { id: string }) => x.id === id);
+    assert.equal(row.status, 'verified');
+    assert.ok(row.last_verified_at, 'last_verified_at set');
+  });
+
+  test('yanlış parola -> error/auth, detay parolayı işaret eder', async () => {
+    const s = await fakeImap(false); servers.push(s);
+    const id = await mkAccount({ host: '127.0.0.1', port: s.port, security: 'none' });
+    const r = json(await verify(id));
+    assert.equal(r.data.status, 'error');
+    assert.equal(r.data.category, 'auth');
+    assert.match(r.data.detail, /parola/i);
+  });
+
+  test('kapalı port -> error/network', async () => {
+    const s = await fakeImap(true);
+    const closedPort = (await new Promise<number>((res) => {
+      const t = net.createServer();
+      t.listen(0, '127.0.0.1', () => { const p = (t.address() as net.AddressInfo).port; t.close(() => res(p)); });
+    }));
+    await s.close();
+    const id = await mkAccount({ host: '127.0.0.1', port: closedPort, security: 'none' });
+    const r = json(await verify(id));
+    assert.equal(r.data.status, 'error');
+    assert.equal(r.data.category, 'network');
+  });
+
+  test('düz sunucuya SSL ile bağlanma -> error/tls', async () => {
+    const s = await fakeImap(true); servers.push(s);
+    const id = await mkAccount({ host: '127.0.0.1', port: s.port, security: 'ssl' });
+    const r = json(await verify(id));
+    assert.equal(r.data.status, 'error');
+    assert.equal(r.data.category, 'tls');
+  });
+
+  test('parola yokken verify -> 400', async () => {
+    // Gizli olmadan hesap: önce gizliyi sil.
+    const s = await fakeImap(true); servers.push(s);
+    const id = await mkAccount({ host: '127.0.0.1', port: s.port, security: 'none' });
+    await post('/core/mail/accounts', USERS.ali, {
+      id, provider: 'imap', display_name: 'test', email: 'ali@ornek.test',
+      config: { host: '127.0.0.1', port: s.port, security: 'none' }, secret: { clear: true },
+    });
+    assert.equal((await verify(id)).statusCode, 400);
+  });
+
+  test('olmayan hesap -> 404, OAuth sağlayıcı -> 400', async () => {
+    assert.equal((await verify('00000000-0000-0000-0000-000000000000')).statusCode, 404);
+    const gid = await post('/core/mail/accounts', USERS.ali, {
+      provider: 'gmail', display_name: 'g', email: 'ali@gmail.test', config: {},
+    });
+    assert.equal((await verify(json(gid).data.id)).statusCode, 400);
+  });
+
+  test('verify yanıtında gizli yok', async () => {
+    const s = await fakeImap(true); servers.push(s);
+    const id = await mkAccount({ host: '127.0.0.1', port: s.port, security: 'none' });
+    const raw = await verify(id);
+    assert.ok(!raw.body.includes('pw"'), 'yanıt gövdesinde parola yok');
+    assert.ok(!raw.body.includes('secret'), 'yanıt gövdesinde secret alanı yok');
   });
 });

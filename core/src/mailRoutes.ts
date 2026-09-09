@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { contextFromRequest } from './auth.js';
 import { withContext } from './db.js';
-import { badRequest, translatePgError } from './errors.js';
-import { encryptSecret, isSecretStoreConfigured } from './mail/crypto.js';
+import { badRequest, notFound, translatePgError } from './errors.js';
+import { decryptSecret, encryptSecret, isSecretStoreConfigured } from './mail/crypto.js';
+import { verifyMailConnection } from './mail/verify.js';
 import { MAIL_PROVIDERS, type MailAccountConfig, type MailProvider, type MailSecret } from './mail/types.js';
 
 /* ===========================================================================
@@ -135,6 +136,48 @@ export function registerMailRoutes(app: FastifyInstance): void {
       });
       if (id === null) reply.code(201);
       return { data: { id: row.id } };
+    } catch (err) { throw translatePgError(err); }
+  });
+
+  /**
+   * "Bağlantıyı test et" -- IMAP/POP3.
+   *
+   * Hesabı RLS altında okur (yalnızca sahip), gizli demeti uygulama katmanında
+   * çözer, gerçek bir bağlantı dener ve sonucu core.mail_account_set_status ile
+   * yazar. Yanıt HER ZAMAN 200: test KOŞTU. Sonuç gövdede -- status ve
+   * kullanıcıya anlamlı detail (auth / network / tls). Gizli asla dönmez.
+   * Graph/Gmail doğrulaması 4. adımda (OAuth).
+   */
+  app.post('/core/mail/accounts/:id/verify', async (req) => {
+    const { id } = req.params as { id: string };
+    try {
+      const acc = await withContext(contextFromRequest(req), async (tx) => {
+        const [row] = await tx`
+          select provider, email_address, config, secret_cipher
+          from core.mail_accounts where id = ${id} and owner_id = core.current_user_id()`;
+        return row as {
+          provider: MailProvider; email_address: string;
+          config: unknown; secret_cipher: string | null;
+        } | undefined;
+      });
+      if (!acc) throw notFound('Mail hesabı bulunamadı');
+      if (acc.provider !== 'imap' && acc.provider !== 'pop3') {
+        throw badRequest('Bu sağlayıcı için bağlantı testi OAuth ile yapılır');
+      }
+      if (!acc.secret_cipher) throw badRequest('Önce parolayı girin');
+
+      const cfg = (typeof acc.config === 'string'
+        ? JSON.parse(acc.config || '{}') : (acc.config ?? {})) as MailAccountConfig;
+      const secret = decryptSecret(acc.secret_cipher);
+      const user = cfg.username?.trim() || acc.email_address;
+
+      const result = await verifyMailConnection(acc.provider, cfg, user, secret.password ?? '');
+
+      await withContext(contextFromRequest(req), async (tx) => {
+        await tx`select core.mail_account_set_status(${id}, ${result.status}, ${result.detail})`;
+      });
+
+      return { data: { status: result.status, category: result.category, detail: result.detail } };
     } catch (err) { throw translatePgError(err); }
   });
 

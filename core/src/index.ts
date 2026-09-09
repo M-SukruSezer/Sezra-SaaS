@@ -17,6 +17,7 @@ export {
 } from './partnerDetail.js';
 export { EventWorker } from './events.js';
 export { encryptSecret, decryptSecret, isSecretStoreConfigured } from './mail/crypto.js';
+export { verifyMailConnection, type VerifyResult, type VerifyCategory } from './mail/verify.js';
 export type {
   MailProvider, MailAccountConfig, MailSecret, MailStatus, MailAccountRow,
 } from './mail/types.js';
