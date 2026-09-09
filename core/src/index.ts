@@ -16,5 +16,9 @@ export {
   registerPartnerRelation, type CariBaglantisi, type CariOzet,
 } from './partnerDetail.js';
 export { EventWorker } from './events.js';
+export { encryptSecret, decryptSecret, isSecretStoreConfigured } from './mail/crypto.js';
+export type {
+  MailProvider, MailAccountConfig, MailSecret, MailStatus, MailAccountRow,
+} from './mail/types.js';
 export { parseTcmb, FX_CURRENCIES } from './fx.js';
 export type { EventWorkerOptions } from './events.js';

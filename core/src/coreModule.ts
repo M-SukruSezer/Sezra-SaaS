@@ -10,6 +10,7 @@ import { registerSearch, registerSearchSource } from './search.js';
 import { registerNotifications } from './notifications.js';
 import { registerPartnerDetail, registerPartnerRelation } from './partnerDetail.js';
 import { registerSmsRoutes } from './smsRoutes.js';
+import { registerMailRoutes } from './mailRoutes.js';
 import { registerPortalRoutes } from './portalRoutes.js';
 
 /** Çekirdek varlıkların CRUD uçları — tüm modüller bunlara referans verir. */
@@ -367,6 +368,7 @@ export const coreModule: SezraModule = {
     registerNotifications(app);
     registerPartnerDetail(app);
     registerSmsRoutes(app);
+    registerMailRoutes(app);
     registerPortalRoutes(app);
 
     /** SMS geçmişi: kim, kime, ne zaman ve neden gitmedi. */
