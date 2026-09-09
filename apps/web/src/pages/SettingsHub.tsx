@@ -46,6 +46,7 @@ const KATEGORILER: HubKategori[] = [
       { ad: 'Firma Genel Ayarları', alt: 'künye · vergi · para birimi · mali yıl', to: '/settings/company' },
       { ad: 'Tanımlar', alt: 'vergi · ölçü birimi · belge numaralandırma', to: '/settings/definitions' },
       { ad: 'Hesap', alt: 'profil · tema · kendi yetkileriniz', to: '/settings/account' },
+      { ad: 'Mail Hesapları', alt: 'kendi e-posta hesabınızı bağlayın (IMAP · POP3 · Graph · Gmail)', to: '/settings/mail' },
       { ad: 'Marka', alt: 'ürün logosu (Sezra yönetimi)', to: '/settings/branding', platform: true },
       { ad: 'Servis Maliyet Ayarları' },
     ],

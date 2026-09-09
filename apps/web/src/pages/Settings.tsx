@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { UserPlus } from 'lucide-react';
 import { api } from '../api/client';
 import { useItem, useList } from '../ui/useResource';
@@ -258,6 +258,205 @@ export function SmsSettings() {
       <PageFoot>
         <span>Parola ve API anahtarı yazıldıktan sonra bir daha okunamaz.</span>
         <span>Gönderilen ve engellenen tüm mesajlar kayıtta saklanır.</span>
+      </PageFoot>
+    </>
+  );
+}
+
+// =============================================================================
+// Bağlı mail hesapları (T-025)
+// =============================================================================
+// KİŞİSEL: her kullanıcı KENDİ mail hesaplarını bağlar. Kiracı yöneticisi bile
+// başkasının kimlik bilgisini göremez (sunucuda RLS). Parola/token uygulama
+// katmanında şifreli saklanır ve HİÇBİR okuma yanıtında dönmez; bu yüzden form
+// parolayı boş açar, boş gönderilince mevcut korunur.
+interface MailAccount {
+  id: string;
+  provider: 'imap' | 'pop3' | 'ms_graph' | 'gmail';
+  display_name: string;
+  email_address: string;
+  config: { host?: string; port?: number; security?: string; username?: string };
+  status: 'pending' | 'verified' | 'error' | 'expired';
+  status_detail: string | null;
+  last_verified_at: string | null;
+  has_secret: boolean;
+}
+
+const MAIL_PROVIDER_AD: Record<string, string> = {
+  imap: 'IMAP', pop3: 'POP3', ms_graph: 'Microsoft Graph', gmail: 'Gmail',
+};
+const MAIL_STATUS: Record<string, { ad: string; ton: string }> = {
+  verified: { ad: 'Doğrulandı', ton: 'badge-ok' },
+  pending: { ad: 'Beklemede', ton: 'badge-warn' },
+  error: { ad: 'Hata', ton: 'badge-danger' },
+  expired: { ad: 'Süresi doldu', ton: 'badge-warn' },
+};
+
+export function MailAccounts() {
+  const hesaplar = useList<MailAccount>('/core/mail/accounts');
+  const saglayicilar = useList<{ code: string; configured: boolean }>('/core/mail/providers');
+  const [form, setForm] = useState({
+    provider: 'imap' as MailAccount['provider'],
+    display_name: '', email: '',
+    host: '', port: '', security: 'ssl', password: '',
+  });
+  const [ekleHata, setEkleHata] = useState<unknown>(null);
+  const [ekliyor, setEkliyor] = useState(false);
+  const [testSonuc, setTestSonuc] = useState<Record<string, string>>({});
+  const [mesgul, setMesgul] = useState<string | null>(null);
+
+  const sunuculuMu = form.provider === 'imap' || form.provider === 'pop3';
+
+  const ekle = async (e: FormEvent) => {
+    e.preventDefault();
+    setEkliyor(true); setEkleHata(null);
+    try {
+      const govde: Record<string, unknown> = {
+        provider: form.provider,
+        display_name: form.display_name,
+        email: form.email,
+        config: sunuculuMu
+          ? { host: form.host, port: form.port ? Number(form.port) : undefined, security: form.security, username: form.email }
+          : {},
+      };
+      if (sunuculuMu && form.password) govde.secret = { password: form.password };
+      await api.post('/core/mail/accounts', govde);
+      setForm((f) => ({ ...f, display_name: '', email: '', host: '', port: '', password: '' }));
+      await hesaplar.reload();
+    } catch (err) { setEkleHata(err); } finally { setEkliyor(false); }
+  };
+
+  const testEt = async (h: MailAccount) => {
+    setMesgul(h.id); setTestSonuc((s) => ({ ...s, [h.id]: '' }));
+    try {
+      const r = await api.post<{ data: { status: string; detail: string } }>(
+        `/core/mail/accounts/${h.id}/verify`, {});
+      setTestSonuc((s) => ({ ...s, [h.id]: r.data.detail }));
+      await hesaplar.reload();
+    } catch (err) {
+      setTestSonuc((s) => ({ ...s, [h.id]: err instanceof Error ? err.message : 'Test başarısız' }));
+    } finally { setMesgul(null); }
+  };
+
+  const sil = async (h: MailAccount) => {
+    if (!window.confirm(`${h.display_name} (${h.email_address}) bağlantısı silinsin mi?`)) return;
+    setMesgul(h.id);
+    try { await api.delete(`/core/mail/accounts/${h.id}`); await hesaplar.reload(); }
+    catch (err) { setEkleHata(err); } finally { setMesgul(null); }
+  };
+
+  return (
+    <>
+      <PageHead
+        kicker="Ayarlar"
+        title="Mail hesapları"
+        subtitle="Kendi e-posta hesabınızı bağlayın. Kimlik bilgileriniz şifreli saklanır ve yalnızca size görünür."
+      />
+      <ErrorBox error={ekleHata} />
+
+      <Card title="Yeni hesap">
+        <form onSubmit={ekle}>
+          <div className="form-grid">
+            <Field label="Sağlayıcı">
+              <select value={form.provider}
+                      onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value as MailAccount['provider'] }))}>
+                {saglayicilar.data.map((p) => (
+                  <option key={p.code} value={p.code} disabled={!p.configured}>
+                    {MAIL_PROVIDER_AD[p.code] ?? p.code}{p.configured ? '' : ' (yapılandırılmamış)'}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Etiket" hint="Bu hesabı nasıl anacaksınız">
+              <input value={form.display_name} required
+                     onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))} />
+            </Field>
+            <Field label="E-posta adresi">
+              <input type="email" value={form.email} required inputMode="email"
+                     onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+            </Field>
+            {sunuculuMu && (
+              <>
+                <Field label="Sunucu">
+                  <input value={form.host} required placeholder="imap.ornek.com"
+                         onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))} />
+                </Field>
+                <Field label="Güvenlik">
+                  <select value={form.security}
+                          onChange={(e) => setForm((f) => ({ ...f, security: e.target.value }))}>
+                    <option value="ssl">SSL/TLS</option>
+                    <option value="starttls">STARTTLS</option>
+                    <option value="none">Şifresiz</option>
+                  </select>
+                </Field>
+                <Field label="Port" hint="Boş bırakılırsa güvenlik ayarına göre seçilir">
+                  <input value={form.port} inputMode="numeric" placeholder="993"
+                         onChange={(e) => setForm((f) => ({ ...f, port: e.target.value }))} />
+                </Field>
+                <Field label="Parola" hint="Şifreli saklanır, bir daha görüntülenmez">
+                  <input type="password" value={form.password} required autoComplete="new-password"
+                         onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
+                </Field>
+              </>
+            )}
+          </div>
+          <div className="row" style={{ marginTop: 16 }}>
+            <button className="btn btn-primary" type="submit" disabled={ekliyor}>
+              {ekliyor ? 'Ekleniyor…' : 'Hesabı ekle'}
+            </button>
+          </div>
+        </form>
+      </Card>
+
+      <Card title="Bağlı hesaplar" padded={false}>
+        <TableScroll label="Bağlı mail hesapları">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Etiket</th><th>Sağlayıcı</th><th>Adres</th><th>Durum</th>
+                <th>Son doğrulama</th><th />
+              </tr>
+            </thead>
+            <tbody>
+              {hesaplar.data.map((h) => {
+                const st = MAIL_STATUS[h.status] ?? { ad: h.status, ton: '' };
+                return (
+                  <tr key={h.id}>
+                    <td>{h.display_name}</td>
+                    <td>{MAIL_PROVIDER_AD[h.provider] ?? h.provider}</td>
+                    <td className="num">{h.email_address}</td>
+                    <td>
+                      <span className={`badge ${st.ton}`}>{st.ad}</span>
+                      {testSonuc[h.id] && <div className="hint">{testSonuc[h.id]}</div>}
+                      {!testSonuc[h.id] && h.status_detail && <div className="hint">{h.status_detail}</div>}
+                    </td>
+                    <td>{h.last_verified_at ? date(h.last_verified_at) : '-'}</td>
+                    <td className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
+                      {(h.provider === 'imap' || h.provider === 'pop3') && (
+                        <button className="btn" disabled={mesgul === h.id}
+                                onClick={() => void testEt(h)}>
+                          {mesgul === h.id ? 'Deneniyor…' : 'Bağlantıyı test et'}
+                        </button>
+                      )}
+                      <button className="btn btn-ghost" disabled={mesgul === h.id}
+                              onClick={() => void sil(h)}>Sil</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </TableScroll>
+        {!hesaplar.loading && hesaplar.data.length === 0 && (
+          <Empty title="Bağlı hesap yok">
+            Yukarıdaki formdan e-posta hesabınızı bağlayın.
+          </Empty>
+        )}
+      </Card>
+
+      <PageFoot>
+        <span>Kimlik bilgileriniz şifreli saklanır ve yalnızca size görünür.</span>
+        <span>Bu ekran yalnızca bağlantı kurar; posta çekme/gönderme kapsam dışıdır.</span>
       </PageFoot>
     </>
   );
