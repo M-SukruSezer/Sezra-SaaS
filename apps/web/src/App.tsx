@@ -24,7 +24,7 @@ import { InventoryAlerts, StockLedger, StockOnHand } from './pages/Inventory';
 import { PlatformAdmins, PlatformOverview, PlatformSupportGrants, PlatformTenants } from './pages/Platform';
 import {
   AccountSettings, AuditLog, Branding, CompanySettings, Definitions, ModuleAccess,
-  SmsSettings, SystemSettings,
+  MailAccounts, SmsSettings, SystemSettings,
 } from './pages/Settings';
 import { SettingsHub } from './pages/SettingsHub';
 import { BarcodeScan } from './pages/BarcodeScan';
@@ -171,6 +171,7 @@ function Gate() {
         <Route path="settings/audit" element={<AuditLog />} />
         <Route path="settings/modules" element={<ModuleAccess />} />
         <Route path="settings/sms" element={<SmsSettings />} />
+        <Route path="settings/mail" element={<MailAccounts />} />
         <Route path="partners" element={<Partners />} />
         <Route path="partners/:id" element={<PartnerDetail />} />
         <Route path="products" element={<Products />} />
