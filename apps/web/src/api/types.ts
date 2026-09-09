@@ -1,6 +1,14 @@
+export interface AccountantTenant {
+  tenant_id: string; tenant_name: string; tenant_slug: string; accepted_at: string | null;
+}
+
 export interface Me {
   /** Destek oturumu etkin mi: platform yöneticisi bir kiracının verisine bakıyor. */
   support_session?: boolean;
+  /** Müşavir oturumu etkin mi: mali müşavir bir kiracının verisini SALT OKUNUR görüyor. */
+  accountant_session?: boolean;
+  /** Oturumdaki kullanıcının müşavir olarak eriştiği kiracılar (panel için). */
+  accountant_tenants?: AccountantTenant[];
   user: {
     id: string; email: string; full_name: string | null;
     phone: string | null; avatar_url: string | null;

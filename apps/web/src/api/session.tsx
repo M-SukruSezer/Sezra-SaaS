@@ -22,6 +22,9 @@ interface SessionState {
   signOut: () => void;
   switchTenant: (tenantId: string) => void;
   setSupportMode: (on: boolean) => void;
+  /** Mali müşavir olarak bir kiracıyı SALT OKUNUR görmeye başla / bırak. */
+  enterAccountantMode: (tenantId: string) => void;
+  exitAccountantMode: () => void;
   /** İzin kontrolü — YALNIZCA görünürlük içindir. Güvenlik sınırı RLS'tir. */
   can: (permission: string) => boolean;
   /** `crm.lead` için read.all ya da read.own'dan herhangi biri var mı */
@@ -74,6 +77,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       setSupportMode: (on) => {
         const next = { ...(session as Session), supportMode: on };
+        persist(next); setSess(next);
+      },
+      enterAccountantMode: (tenantId) => {
+        // Müşavir modu ile normal üyelik/destek modu birlikte taşınmaz:
+        // tenantId artık müşavirin baktığı kiracıdır.
+        const next = {
+          ...(session as Session), tenantId, accountantMode: true, supportMode: false,
+        };
+        persist(next); setSess(next);
+      },
+      exitAccountantMode: () => {
+        const next = { ...(session as Session), accountantMode: false };
+        delete next.tenantId;
         persist(next); setSess(next);
       },
       can: (p) => permissions.has(p),

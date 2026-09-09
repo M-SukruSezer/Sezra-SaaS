@@ -10,6 +10,13 @@ export interface Session {
   userId: string;
   tenantId?: string;
   supportMode?: boolean;
+  /**
+   * Mali müşavir SALT OKUNUR erişim modu. Açıkken her istek
+   * `x-accountant-mode: on` taşır ve `tenantId` müşavirin baktığı kiracıdır.
+   * Sınırı sunucu çizer: `core.accountant_tenant_id()` yalnızca for-select
+   * politikalarında, canlı bir grant varsa.
+   */
+  accountantMode?: boolean;
   accessToken?: string;
 }
 
@@ -42,6 +49,7 @@ function headers(withBody: boolean): Record<string, string> {
   else h['x-user-id'] = session.userId;
   if (session.tenantId) h['x-tenant-id'] = session.tenantId;
   if (session.supportMode) h['x-support-mode'] = 'on';
+  if (session.accountantMode) h['x-accountant-mode'] = 'on';
   return h;
 }
 

@@ -54,6 +54,8 @@ interface NavEntry {
   /** Madde ikonu. Uçan panelde ve geniş menüde satırın başında durur. */
   simge?: LucideIcon;
   permission?: string; module?: string; platform?: boolean;
+  /** Yalnızca en az bir kiracıya mali müşavir erişimi olan kullanıcıya görünür. */
+  musavir?: boolean;
   /**
    * "YENİ" rozeti.
    *
@@ -139,6 +141,10 @@ const NAV: NavGroup[] = [
       { to: '/platform/admins',  label: 'Yöneticiler', simge: UserCog, platform: true },
       { to: '/platform/support-grants', label: 'Destek erişimleri', simge: Shield, platform: true },
     ],
+  },
+  {
+    key: 'musavir', icon: 'panel', group: 'Mali Müşavir',
+    items: [{ to: '/musavir', label: 'Şirketlerim', simge: Landmark, musavir: true }],
   },
   {
     key: 'genel', icon: 'dashboard', group: 'Anlık Görünüm',
@@ -239,6 +245,7 @@ const NAV: NavGroup[] = [
       // kısayollar en sık gidilenler. Gerisi merkezden bulunur.
       { to: '/settings',             label: 'Yönetim Paneli', simge: Layers },
       { to: '/settings/company',     label: 'Şirket', simge: Building2 },
+      { to: '/settings/accountant',  label: 'Mali Müşavir', simge: Landmark, permission: 'core.user.write.all' },
       { to: '/settings/definitions', label: 'Tanımlar', simge: Tag },
       { to: '/settings/account',     label: 'Hesap', simge: UserCog },
       { to: '/settings/system',      label: 'Kullanıcılar', simge: Shield, permission: 'core.user.read.all' },
@@ -460,7 +467,8 @@ export function Shell() {
   const visible = (e: NavEntry) =>
     (!e.platform || me.user.is_platform_admin) &&
     (!e.module || enabledModules.has(e.module)) &&
-    (!e.permission || permissions.has(e.permission));
+    (!e.permission || permissions.has(e.permission)) &&
+    (!e.musavir || (me.accountant_tenants?.length ?? 0) > 0);
 
   // Liste yalnızca oturum (yetki/modül) değişince yeniden kurulur; her
   // çizimde yeni dizi üretmek alt bileşeni boşuna çalıştırıyordu.
@@ -769,6 +777,11 @@ export function Shell() {
           {me.support_session && (
             <span className="badge badge-warn" title="Bu erişim denetim izine yazılır">
               Destek oturumu
+            </span>
+          )}
+          {me.accountant_session && (
+            <span className="badge badge-warn" title="Mali müşavir olarak yalnızca görüntülüyorsunuz">
+              Müşavir: salt okunur
             </span>
           )}
         </header>

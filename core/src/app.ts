@@ -101,6 +101,7 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
 
       const [support] = await tx`select core.support_tenant_id() is not null as active`;
       const [accountant] = await tx`select core.accountant_tenant_id() is not null as active`;
+      const accountantTenants = await tx`select * from core.accountant_tenants()`;
 
       // PORTAL OTURUMU AYRI BİR ARAYÜZDÜR. Portal kullanıcısının hiçbir izni
       // ve hiçbir modülü yoktur; personel kabuğu ona boş bir menü ve her
@@ -123,6 +124,7 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
         tenant: tenant ?? null,
         support_session: (support as { active: boolean } | undefined)?.active ?? false,
         accountant_session: (accountant as { active: boolean } | undefined)?.active ?? false,
+        accountant_tenants: portalOturumu ? [] : accountantTenants,
         memberships,
         branches: portalOturumu ? [] : branches,
         roles,
