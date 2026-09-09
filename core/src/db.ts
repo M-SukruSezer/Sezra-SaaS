@@ -26,6 +26,15 @@ export interface RequestContext {
   tenantId?: string | undefined;
   /** Platform yöneticisinin bilinçli kiracılar-arası destek erişimi */
   supportMode?: boolean;
+  /**
+   * Mali müşavirin bilinçli kiracılar-arası SALT OKUNUR erişimi.
+   *
+   * `supportMode` ile aynı desen: istemciden `x-accountant-mode: on` gelir,
+   * asıl sınırı `core.accountant_tenant_id()` çizer (canlı grant + kabul +
+   * iptal edilmemiş). RLS politika üreticisi bu kapsamı yalnızca for-select
+   * politikasına koyduğu için yazma yolu veritabanı seviyesinde kapalıdır.
+   */
+  accountantMode?: boolean;
   /** İstek izleme kimliği (log ve denetim korelasyonu) */
   requestId?: string;
 }
@@ -64,6 +73,7 @@ export async function withContext<T>(
     await tx`select set_config('app.user_id', ${ctx.userId}, true)`;
     await tx`select set_config('app.tenant_id', ${ctx.tenantId ?? ''}, true)`;
     await tx`select set_config('app.support_mode', ${ctx.supportMode ? 'on' : 'off'}, true)`;
+    await tx`select set_config('app.accountant_mode', ${ctx.accountantMode ? 'on' : 'off'}, true)`;
     return fn(tx);
   }) as unknown as Promise<T>;
 }

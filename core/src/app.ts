@@ -74,7 +74,7 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
       const [tenant] = await tx`
         select t.id, t.name, t.slug, t.currency, t.locale, t.timezone
         from core.tenants t
-        where t.id = coalesce(core.current_tenant_id(), core.support_tenant_id())`;
+        where t.id = coalesce(core.current_tenant_id(), core.support_tenant_id(), core.accountant_tenant_id())`;
 
       const memberships = await tx`
         select t.id as tenant_id, t.name, t.slug, m.is_default
@@ -90,7 +90,7 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
       const modules = await tx`
         select m.code, m.name from core.modules m
         join core.tenant_modules tm on tm.module_code = m.code
-        where tm.tenant_id = coalesce(core.current_tenant_id(), core.support_tenant_id())
+        where tm.tenant_id = coalesce(core.current_tenant_id(), core.support_tenant_id(), core.accountant_tenant_id())
           and tm.enabled
         order by m.phase, m.name`;
 
@@ -100,6 +100,7 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
         where mr.membership_id = core.current_membership_id()`;
 
       const [support] = await tx`select core.support_tenant_id() is not null as active`;
+      const [accountant] = await tx`select core.accountant_tenant_id() is not null as active`;
 
       // PORTAL OTURUMU AYRI BİR ARAYÜZDÜR. Portal kullanıcısının hiçbir izni
       // ve hiçbir modülü yoktur; personel kabuğu ona boş bir menü ve her
@@ -121,6 +122,7 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
         user: user ?? null,
         tenant: tenant ?? null,
         support_session: (support as { active: boolean } | undefined)?.active ?? false,
+        accountant_session: (accountant as { active: boolean } | undefined)?.active ?? false,
         memberships,
         branches: portalOturumu ? [] : branches,
         roles,

@@ -107,6 +107,15 @@ select public.t_assert(
   and (select distinct tenant_id from finance.accounts) = :'ornek',
   'Musavir YALNIZCA davet edilen kiracinin verisini gorur (rakip sizmaz)');
 
+select public.t_assert(
+  (select name from core.tenants where id = :'ornek') is not null
+  and (select count(*) from core.branches where tenant_id = :'ornek') > 0,
+  'Musavir kiraci adini ve subelerini OKUYABILIR (panel /me icin)');
+select public.t_assert(
+  public.t_rowcount(format(
+    'update core.branches set name = ''X'' where tenant_id = %L', :'ornek')) = 0,
+  'Musavir core.branches satirlarini YAZAMAZ');
+
 \echo ''
 \echo '=== 6. SALT OKUNURLUK RLS SEVIYESINDE — YAZMA REDDEDILIR ==='
 select public.t_assert(
