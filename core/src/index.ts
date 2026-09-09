@@ -23,3 +23,13 @@ export type {
 } from './mail/types.js';
 export { parseTcmb, FX_CURRENCIES } from './fx.js';
 export type { EventWorkerOptions } from './events.js';
+export {
+  isValidVkn, isValidTckn, classifyTaxNo, normalizeTaxNo, type TaxNoKind,
+} from './company/vkn.js';
+export { registerCompanyProvider, listCompanyProviders, lookupCompany } from './company/registry.js';
+export { gibParse } from './company/gib.js';
+export { paidParse } from './company/paid.js';
+export { _resetCompanyLookupState } from './companyRoutes.js';
+export type {
+  CompanyProvider, CompanyInfoRaw, CompanyLookupOutcome,
+} from './company/types.js';

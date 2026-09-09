@@ -11,6 +11,7 @@ import { registerNotifications } from './notifications.js';
 import { registerPartnerDetail, registerPartnerRelation } from './partnerDetail.js';
 import { registerSmsRoutes } from './smsRoutes.js';
 import { registerMailRoutes } from './mailRoutes.js';
+import { registerCompanyRoutes } from './companyRoutes.js';
 import { registerPortalRoutes } from './portalRoutes.js';
 import { registerAccountantRoutes } from './accountantRoutes.js';
 
@@ -374,6 +375,7 @@ export const coreModule: SezraModule = {
     registerPartnerDetail(app);
     registerSmsRoutes(app);
     registerMailRoutes(app);
+    registerCompanyRoutes(app);
     registerPortalRoutes(app);
     registerAccountantRoutes(app);
 
