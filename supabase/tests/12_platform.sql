@@ -75,10 +75,29 @@ select public.t_assert(
   (select count(*) from core.platform_tenants('rakip')) = 1,
   'Arama süzgeci çalışır');
 
+-- Beklenen kullanıcı sayısı TOHUMDAN türetilir: konsol satırı, o kiracının
+-- aktif üye sayısını göstermeli. Sabit bir sayı yazmak, demo veriye biri daha
+-- kullanıcı eklendiğinde (ör. gerçek operatör hesabı) testi kırardı.
+-- Bağımsız sayım RLS dışında (owner) yapılır ki fonksiyonun kendi kaynağına
+-- değil, tabloya karşı doğrulansın: yanlış kiracı süzgeci, eksik is_active
+-- süzgeci ya da rollerden ötürü mükerrer sayım burada yakalanır.
+reset role;
+select count(*)::int as ornek_uye
+  from core.memberships m
+  join core.tenants t on t.id = m.tenant_id
+ where t.slug = 'ornek-ticaret' and m.is_active \gset
+set role sezra_app;
+select set_config('app.user_id', '11111111-1111-1111-1111-111111111111', false);
+
 select public.t_assert(
-  (select user_count from core.platform_tenants('ornek')) = 3,
-  'Kullanıcı sayısı doğru',
-  (select user_count::text from core.platform_tenants('ornek')));
+  :ornek_uye >= 3,
+  'Tohum en az 3 aktif üye kuruyor (Merve, Ali, Deniz)', :'ornek_uye');
+
+select public.t_assert(
+  (select user_count from core.platform_tenants('ornek')) = :ornek_uye,
+  'Kullanıcı sayısı aktif üye sayısıyla eşleşir',
+  format('konsol=%s tablo=%s',
+    (select user_count::text from core.platform_tenants('ornek')), :'ornek_uye'));
 
 \echo ''
 \echo '=== 3. MODÜL AÇMA: kurulum kancası da çalışmalı ==='
