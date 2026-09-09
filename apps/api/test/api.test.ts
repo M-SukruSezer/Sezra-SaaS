@@ -358,13 +358,36 @@ describe('kullanıcı ve rol yönetimi', () => {
   // KİLİTLENME KORUMASI: son yöneticinin yöneticiliği alınırsa kiracıyı
   // kimse yönetemez ve geri dönüşü yalnızca destek modundan mümkündür.
   test('son yöneticinin rolü değiştirilemez', async () => {
-    const res = await app.inject({
-      method: 'POST', url: `/core/users/${MERVE}/roles`, headers: as(USERS.merve),
-      payload: { role_codes: ['sales'] } });
-    // check_violation -> 422: istek biçimsel olarak doğru ama iş kuralı
-    // reddediyor. 409 (çakışma) değil, çünkü çakışan bir şey yok.
-    assert.equal(res.statusCode, 422);
-    assert.match(json(res).error.message, /en az bir yönetici/i);
+    // Tohum, Örnek Ticaret'e ikinci bir tenant_admin koyabilir (gerçek
+    // operatör hesabı, m.sukrusezer@gmail.com). Bu test "SON yönetici"
+    // senaryosunu sınar; önce Merve'yi tek yönetici bırak, doğrula, geri al.
+    // Doğrudan SQL: guard'ı atlar, kurulum içindir.
+    const digerAdminler = await sql<{ membership_id: string; role_id: string }[]>`
+      select mr.membership_id, mr.role_id
+      from core.membership_roles mr
+      join core.memberships m on m.id = mr.membership_id
+      join core.roles r on r.id = mr.role_id
+      join core.tenants t on t.id = m.tenant_id
+      where t.slug = 'ornek-ticaret' and r.code = 'tenant_admin'
+        and m.user_id <> ${MERVE}`;
+    for (const r of digerAdminler) {
+      await sql`delete from core.membership_roles
+        where membership_id = ${r.membership_id} and role_id = ${r.role_id}`;
+    }
+    try {
+      const res = await app.inject({
+        method: 'POST', url: `/core/users/${MERVE}/roles`, headers: as(USERS.merve),
+        payload: { role_codes: ['sales'] } });
+      // check_violation -> 422: istek biçimsel olarak doğru ama iş kuralı
+      // reddediyor. 409 (çakışma) değil, çünkü çakışan bir şey yok.
+      assert.equal(res.statusCode, 422);
+      assert.match(json(res).error.message, /en az bir yönetici/i);
+    } finally {
+      for (const r of digerAdminler) {
+        await sql`insert into core.membership_roles (membership_id, role_id)
+          values (${r.membership_id}, ${r.role_id}) on conflict do nothing`;
+      }
+    }
   });
 
   test('kullanıcı kendi erişimini kapatamaz', async () => {
