@@ -19,7 +19,12 @@ source "$(dirname "$0")/db-env.sh"
 # Yine de burada açıkça sabitliyoruz: testin neyi sınadığı ortam değişkenine
 # bağlı olmamalı.
 : "${DB_APP_ROLE:=sezra_app}"
-export DATABASE_URL DB_APP_ROLE
+# SSRF koruması varsayılan olarak loopback/özel adresleri reddeder. Mail doğrulama
+# testleri yerel sahte IMAP sunucusuna (127.0.0.1) bağlanır; dar, açık allowlist
+# ile SADECE onu geçir. Üretimde bu değişken TANIMSIZDIR (hiçbir özel adrese izin
+# yok). Test dosyası da aynı değeri kendi içinde ayarlar; bu satır açık test yolu.
+: "${MAIL_SSRF_ALLOW:=127.0.0.1}"
+export DATABASE_URL DB_APP_ROLE MAIL_SSRF_ALLOW
 
 bash scripts/audit.sh
 echo

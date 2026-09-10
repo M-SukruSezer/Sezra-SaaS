@@ -15,6 +15,11 @@ process.env.AUTH_MODE ??= 'dev';
 process.env.NODE_ENV = 'test';
 // Şifreleme anahtarı testte sabit ve SAHTE. Gerçek anahtar repoda yok.
 process.env.MAIL_SECRET_KEY ??= '0'.repeat(64);
+// SSRF koruması varsayılan olarak loopback'i reddeder. Testler yerel sahte IMAP
+// sunucusuna (127.0.0.1) bağlanır; DAR, açık allowlist ile SADECE onu geçir.
+// Üretimde bu değişken boştur. Diğer özel adresler (10.x vb.) hâlâ engellenir --
+// "SSRF: allowlist dışı özel IP reddedilir" testi bunu kanıtlar.
+process.env.MAIL_SSRF_ALLOW ??= '127.0.0.1';
 
 import '../src/env.ts';
 import { test, before, after, describe } from 'node:test';
@@ -274,5 +279,16 @@ describe('bağlantıyı test et (IMAP/POP3)', () => {
     const raw = await verify(id);
     assert.ok(!raw.body.includes('pw"'), 'yanıt gövdesinde parola yok');
     assert.ok(!raw.body.includes('secret'), 'yanıt gövdesinde secret alanı yok');
+  });
+
+  // SALDIRI KANITI: allowlist SADECE 127.0.0.1'i açar. Başka bir özel/ic-ağ IP'si
+  // (10.0.0.1) hesap OLUŞTURMA sınırında reddedilmeli -- SSRF koruması yerinde.
+  test('SSRF: allowlist dışı özel IP reddedilir (hesap oluşturmada 400)', async () => {
+    const res = await post('/core/mail/accounts', USERS.ali, {
+      provider: 'imap', display_name: 'ssrf', email: 'ali+ssrf@ornek.test',
+      config: { host: '10.0.0.1', port: 143, security: 'none' }, secret: { password: 'pw' },
+    });
+    assert.equal(res.statusCode, 400, res.body);
+    assert.match(json(res).error?.message ?? res.body, /ic ag|özel adres|izin verilmiyor/i);
   });
 });

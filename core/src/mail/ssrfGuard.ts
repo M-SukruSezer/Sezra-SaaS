@@ -11,12 +11,28 @@
  *   - Sink: baglanti aninda ad COZULUR ve donen HER adres dogrulanir; boylece
  *     DNS rebinding (once publik, sonra 127.0.0.1 cozen ad) da yakalanir.
  *
- * Allowlist mumkun degil (kullanicinin mail sunucusu keyfi bir publik adrestir);
- * bu yuzden ozel/rezerve araliklara DENYLIST uygulanir -- publik-egress kurali.
+ * Genel kural DENYLIST'tir (kullanicinin mail sunucusu keyfi bir publik adrestir,
+ * bu yuzden allowlist mumkun degil): ozel/rezerve araliklar reddedilir.
+ *
+ * DAR OVERRIDE -- MAIL_SSRF_ALLOW: virgulle ayrilmis host/IP listesi. SADECE bu
+ * listedeki adresler denylist'i deler. URETIMDE BOS (yani hicbir ozel adrese
+ * izin yok). Amaci test/kurulum: yerel sahte IMAP sunucusu (127.0.0.1) gibi
+ * bilinen, denetlenebilir bir hedefe izin vermek. NODE_ENV hilesi DEGIL --
+ * dar, acik, dokumante bir override; hem sinir hem sink katmani onu gorur.
  */
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
 import { AppError } from '../errors.js';
+
+/**
+ * MAIL_SSRF_ALLOW'daki izinli host/IP kumesi (kucuk harfe normalize). Cagri
+ * aninda okunur ki test surec ici env ayarlayabilsin. Uretimde bos => bos kume.
+ */
+function allowSet(): Set<string> {
+  const raw = process.env.MAIL_SSRF_ALLOW?.trim();
+  if (!raw) return new Set();
+  return new Set(raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+}
 
 /** Bir IPv4/IPv6 adresi ic/ozel/rezerve mi? true => baglanmak YASAK. */
 export function isBlockedAddress(ip: string): boolean {
@@ -33,6 +49,7 @@ export function isBlockedAddress(ip: string): boolean {
  * dogrular. Boylece mesru sunucu adlari sinirinda yanlislikla reddedilmez.
  */
 export function isBlockedLiteralIp(host: string): boolean {
+  if (allowSet().has(host.trim().toLowerCase())) return false; // dar override
   return net.isIP(host) !== 0 && isBlockedAddress(host);
 }
 
@@ -69,9 +86,13 @@ function isBlockedV6(ip: string): boolean {
  * (DNS rebinding) kapanir.
  */
 export async function resolveSafeAddress(host: string): Promise<string> {
-  // Zaten literal IP ise dogrudan dogrula.
+  const allow = allowSet();
+  const hostLc = host.trim().toLowerCase();
+  const allowed = (ip: string) => allow.has(hostLc) || allow.has(ip.toLowerCase());
+
+  // Zaten literal IP ise dogrudan dogrula (allowlist deler).
   if (net.isIP(host)) {
-    if (isBlockedAddress(host)) throw blocked(host);
+    if (!allowed(host) && isBlockedAddress(host)) throw blocked(host);
     return host;
   }
   let addrs;
@@ -82,7 +103,7 @@ export async function resolveSafeAddress(host: string): Promise<string> {
   }
   if (addrs.length === 0) throw new AppError(400, 'mail_host_unresolved', 'Sunucu adi cozulemedi.');
   for (const a of addrs) {
-    if (isBlockedAddress(a.address)) throw blocked(host);
+    if (!allowed(a.address) && isBlockedAddress(a.address)) throw blocked(host);
   }
   return addrs[0]!.address;
 }
