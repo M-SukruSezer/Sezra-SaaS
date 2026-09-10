@@ -32,6 +32,12 @@ const PAYMENT_COLUMNS = ['id', 'branch_id', 'direction', 'number', 'partner_id',
   'method', 'bank_account_id', 'amount', 'currency', 'allocated_total', 'status',
   'reference', 'notes', 'journal_entry_id', 'owner_id', 'created_at', 'updated_at'] as const;
 
+const TRANSFER_COLUMNS = ['id', 'branch_id', 'number', 'transfer_date',
+  'source_account_id', 'source_bank_account_id', 'dest_account_id', 'dest_bank_account_id',
+  'source_currency', 'dest_currency', 'source_amount', 'dest_amount', 'exchange_rate',
+  'status', 'reference', 'description', 'notes', 'journal_entry_id',
+  'cancelled_at', 'cancel_reason', 'owner_id', 'created_at', 'updated_at'] as const;
+
 /** UN/ECE birim kodu eşlemesi — UBL-TR bunu ister. */
 const UOM_TO_UNECE: Record<string, string> = {
   ADET: 'C62', PAKET: 'PK', KOLI: 'BX', KG: 'KGM', GR: 'GRM',
@@ -327,6 +333,26 @@ export const financeModule: SezraModule = {
     });
 
     registerResource(app, {
+      path: '/finance/transfers',
+      schema: 'finance', table: 'transfers', readFrom: 'v_transfer_list',
+      columns: [...TRANSFER_COLUMNS, 'source_account_code', 'source_account_name',
+        'dest_account_code', 'dest_account_name', 'source_bank_account_name',
+        'dest_bank_account_name', 'owner_name', 'branch_name', 'is_multi_currency'],
+      // number, status, tutarlar ve journal_entry_id yazılamaz: sırasıyla sekans,
+      // iş akışı (post/cancel) ve yevmiye tetikleyicileri belirler. Virman
+      // normalde POST /finance/transfers/execute ile tek adımda oluşturulur;
+      // buradaki writable yalnızca elde taslak düzenleme içindir.
+      writable: ['branch_id', 'transfer_date', 'source_account_id', 'source_bank_account_id',
+        'dest_account_id', 'dest_bank_account_id', 'source_currency', 'dest_currency',
+        'source_amount', 'dest_amount', 'exchange_rate', 'reference', 'description',
+        'notes', 'owner_id'],
+      filterable: [...TRANSFER_COLUMNS],
+      sortable: [...TRANSFER_COLUMNS],
+      searchable: ['number', 'reference', 'description'],
+      defaultSort: 'transfer_date',
+    });
+
+    registerResource(app, {
       path: '/finance/bank-accounts',
       schema: 'finance', table: 'bank_accounts',
       columns: ['id', 'branch_id', 'name', 'bank_name', 'iban', 'currency', 'account_id', 'is_active'],
@@ -399,6 +425,53 @@ export const financeModule: SezraModule = {
 
     action('/finance/payments/:id/post', async (tx, id) => {
       const [row] = await tx`select * from finance.post_payment(${id})`;
+      return row;
+    });
+
+    /* ---- Virman ----------------------------------------------------------
+       Hesaplar arası iç transfer. `execute` tek adımda oluşturur ve
+       muhasebeleştirir (register_payment deseni). Kaynak/hedef bacağı ya bir
+       banka hesabıdır (bank_account_id) ya da doğrudan bir kasa/GL hesabıdır
+       (account_id). */
+    app.post('/finance/transfers/execute', async (req, reply) => {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      const amount = Number(b.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw badRequest('amount sıfırdan büyük bir sayı olmalı');
+      }
+      if (!b.source_account_id && !b.source_bank_account_id) {
+        throw badRequest('source_account_id ya da source_bank_account_id zorunlu');
+      }
+      if (!b.dest_account_id && !b.dest_bank_account_id) {
+        throw badRequest('dest_account_id ya da dest_bank_account_id zorunlu');
+      }
+      const row = await run(req, async (tx) => {
+        const [r] = await tx`
+          select * from finance.create_transfer(
+            ${(b.source_account_id as string) ?? null}::uuid,
+            ${(b.dest_account_id as string) ?? null}::uuid,
+            ${amount}::numeric,
+            ${(b.date as string) ?? null}::date,
+            ${(b.source_bank_account_id as string) ?? null}::uuid,
+            ${(b.dest_bank_account_id as string) ?? null}::uuid,
+            ${(b.reference as string) ?? null},
+            ${(b.description as string) ?? null},
+            ${(b.notes as string) ?? null},
+            ${(b.branch_id as string) ?? null}::uuid)`;
+        return r;
+      });
+      reply.code(201);
+      return { data: row };
+    });
+
+    action('/finance/transfers/:id/post', async (tx, id) => {
+      const [row] = await tx`select * from finance.post_transfer(${id})`;
+      return row;
+    });
+
+    action('/finance/transfers/:id/cancel', async (tx, id, body) => {
+      const [row] = await tx`
+        select * from finance.cancel_transfer(${id}, ${(body.reason as string) ?? null})`;
       return row;
     });
 

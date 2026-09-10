@@ -239,6 +239,89 @@ describe('e-Fatura', () => {
   });
 });
 
+describe('virman (hesaplar arası transfer)', () => {
+  let transferId: string;
+  let acc100: string;
+  let acc102: string;
+
+  before(async () => {
+    const a = await get('/finance/accounts?limit=500', USERS.merve);
+    acc100 = a.data.find((x: { code: string }) => x.code === '100').id;
+    acc102 = a.data.find((x: { code: string }) => x.code === '102').id;
+  });
+
+  test('kasa -> banka virmanı tek adımda oluşur ve dengeli yevmiye kaydı üretir', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/finance/transfers/execute', headers: as(USERS.merve),
+      payload: { source_account_id: acc100, dest_account_id: acc102, amount: 5000 },
+    });
+    assert.equal(res.statusCode, 201);
+    const tr = json(res).data;
+    transferId = tr.id;
+    assert.match(tr.number, /^VIR-\d{4}-\d{6}$/);
+    assert.equal(tr.status, 'posted');
+    assert.equal(Number(tr.source_amount), 5000);
+    assert.equal(Number(tr.dest_amount), 5000);
+
+    const entry = (await get(`/finance/entries/${tr.journal_entry_id}/full`, USERS.merve)).data;
+    assert.equal(Number(entry.total_debit), 5000);
+    assert.equal(Number(entry.total_credit), 5000);
+    const byAccount = Object.fromEntries(
+      entry.lines.map((l: { account_code: string; debit: string; credit: string }) =>
+        [l.account_code, { debit: Number(l.debit), credit: Number(l.credit) }]),
+    );
+    assert.equal(byAccount['102'].debit, 5000);   // BANKALAR giriş
+    assert.equal(byAccount['100'].credit, 5000);  // KASA çıkış
+  });
+
+  test('mizan virmandan sonra hâlâ dengeli', async () => {
+    const res = await get('/finance/reports/trial-balance', USERS.merve);
+    const debit = res.data.reduce((s: number, r: { debit_total: string }) => s + Number(r.debit_total), 0);
+    const credit = res.data.reduce((s: number, r: { credit_total: string }) => s + Number(r.credit_total), 0);
+    assert.equal(Math.round((debit - credit) * 100), 0);
+  });
+
+  test('aynı hesaba virman reddedilir', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/finance/transfers/execute', headers: as(USERS.merve),
+      payload: { source_account_id: acc100, dest_account_id: acc100, amount: 100 },
+    });
+    assert.notEqual(res.statusCode, 201);
+  });
+
+  test('yetkisiz kullanıcı virman yapamaz', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/finance/transfers/execute', headers: as(USERS.ali),
+      payload: { source_account_id: acc100, dest_account_id: acc102, amount: 100 },
+    });
+    assert.ok([403, 404].includes(res.statusCode), `beklenen 403/404, gelen ${res.statusCode}`);
+  });
+
+  test('muhasebeleşmiş virman silinemez', async () => {
+    const res = await app.inject({
+      method: 'DELETE', url: `/finance/transfers/${transferId}`, headers: as(USERS.merve),
+    });
+    assert.ok([403, 404, 422].includes(res.statusCode), `beklenen 4xx, gelen ${res.statusCode}`);
+  });
+
+  test('iptal ters kayıt üretir, belge cancelled olur, mizan dengeli kalır', async () => {
+    const res = await app.inject({
+      method: 'POST', url: `/finance/transfers/${transferId}/cancel`,
+      headers: as(USERS.merve), payload: { reason: 'yanlış hesap' },
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal(json(res).data.status, 'cancelled');
+
+    const tr = (await get(`/finance/transfers/${transferId}`, USERS.merve)).data;
+    assert.equal(tr.status, 'cancelled');
+
+    const tb = await get('/finance/reports/trial-balance', USERS.merve);
+    const debit = tb.data.reduce((s: number, r: { debit_total: string }) => s + Number(r.debit_total), 0);
+    const credit = tb.data.reduce((s: number, r: { credit_total: string }) => s + Number(r.credit_total), 0);
+    assert.equal(Math.round((debit - credit) * 100), 0);
+  });
+});
+
 describe('izolasyon', () => {
   test('başka kiracı Örnek Ticaret muhasebesini göremez', async () => {
     const inv = await get('/finance/invoices', USERS.rakip);
