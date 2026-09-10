@@ -3526,3 +3526,48 @@ th.r .th-ic { flex-direction: row-reverse; }
   .topbar > .btn { display: none; }
   .topbar > .theme-toggle { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   Gelen kutusu (Posta)
+   ---------------------------------------------------------------------------
+   Liste + okuma bolmesi .split ile yan yana; dar ekranda alt alta.
+   Mesaj satiri bir <button>: klavyeyle gezilir, secili ve okunmamis
+   durumlari RENK DISINDA da (kalinlik, sol serit, "Yeni" rozeti) kodlu. */
+.mail-liste { list-style: none; margin: 0; padding: 0; }
+.mail-liste > li + li { border-block-start: var(--hair) solid var(--c-border); }
+.mail-satir {
+  display: grid; gap: var(--s-1);
+  inline-size: 100%; text-align: start;
+  padding: var(--s-3) var(--s-4);
+  background: none; border: 0;
+  border-inline-start: 3px solid transparent;
+  cursor: pointer; color: var(--c-text); font: inherit;
+}
+.mail-satir:hover { background: var(--c-surface-2); }
+.mail-satir:focus-visible { outline: 0; box-shadow: var(--ring); }
+.mail-satir-secili { background: var(--c-brand-soft); border-inline-start-color: var(--c-brand); }
+.mail-satir-yeni .mail-satir-kisi,
+.mail-satir-yeni .mail-satir-konu { font-weight: var(--fw-medium); }
+.mail-satir-ust { display: flex; justify-content: space-between; gap: var(--s-2); }
+.mail-satir-kisi { font-size: var(--fs-sm); }
+.mail-satir-zaman { font-size: var(--fs-micro); color: var(--c-text-mute); flex: none; }
+.mail-satir-konu { font-size: var(--fs-sm); }
+.mail-satir-onizleme {
+  font-size: var(--fs-micro); color: var(--c-text-mute);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mail-govde h2 { font-size: var(--fs-lg); line-height: var(--lh-snug); }
+.mail-ust-veri { display: grid; gap: var(--s-1); margin: var(--s-3) 0; }
+.mail-ust-veri > div { display: flex; gap: var(--s-2); font-size: var(--fs-sm); }
+.mail-ust-veri dt {
+  flex: none; inline-size: 5rem;
+  color: var(--c-text-mute); font-family: var(--mono);
+  font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--tr-caps);
+}
+.mail-ust-veri dd { margin: 0; overflow-wrap: anywhere; }
+.mail-metin {
+  margin: 0; padding: var(--s-3);
+  background: var(--c-surface-2); border-radius: var(--r-sm);
+  font: inherit; line-height: var(--lh-body);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}

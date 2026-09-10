@@ -41,6 +41,7 @@ import { ProjectDetail, ProjectList, ProjectReports } from './pages/Projects';
 import { HelpdeskReports, TicketDetail, TicketList } from './pages/Helpdesk';
 import { PortalDavet, PortalShell } from './pages/Portal';
 import { AccountantAccess, MusavirPanel, musavirErisimiVar } from './pages/Musavir';
+import { MailInbox } from './pages/Mail';
 
 /** Davet bağlantısı: kabul ekranı bu yolda açılır. */
 const DAVET_YOLU = '/portal/davet/';
@@ -173,6 +174,7 @@ function Gate() {
         <Route path="platform/admins" element={<PlatformAdmins />} />
         <Route path="platform/support-grants" element={<PlatformSupportGrants />} />
         <Route path="musavir" element={<MusavirPanel />} />
+        <Route path="mail" element={<MailInbox />} />
         <Route path="settings/accountant" element={<AccountantAccess />} />
         <Route path="settings" element={<SettingsHub />} />
         <Route path="settings/company" element={<CompanySettings />} />
