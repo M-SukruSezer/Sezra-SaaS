@@ -320,6 +320,74 @@ describe('virman (hesaplar arası transfer)', () => {
     const credit = tb.data.reduce((s: number, r: { credit_total: string }) => s + Number(r.credit_total), 0);
     assert.equal(Math.round((debit - credit) * 100), 0);
   });
+
+  describe('çok para birimli virman', () => {
+    let usdBankId: string;
+
+    before(async () => {
+      const res = await app.inject({
+        method: 'POST', url: '/finance/bank-accounts', headers: as(USERS.merve),
+        payload: { name: 'Döviz Kasa Bankası', currency: 'USD', account_id: acc102 },
+      });
+      assert.equal(res.statusCode, 201, `banka hesabı açılmalı, gelen ${res.statusCode}`);
+      usdBankId = json(res).data.id;
+    });
+
+    test('kur ve hedef tutar ayrı kolonlarda saklanır, kayıt ana para biriminde dengeli', async () => {
+      const res = await app.inject({
+        method: 'POST', url: '/finance/transfers/execute', headers: as(USERS.merve),
+        payload: {
+          source_bank_account_id: usdBankId, dest_account_id: acc100,
+          amount: 1000, exchange_rate: 40, dest_amount: 40000,
+        },
+      });
+      assert.equal(res.statusCode, 201);
+      const tr = json(res).data;
+      assert.equal(tr.source_currency, 'USD');
+      assert.equal(tr.dest_currency, 'TRY');
+      assert.equal(Number(tr.source_amount), 1000);
+      assert.equal(Number(tr.dest_amount), 40000);
+      assert.equal(Number(tr.exchange_rate), 40);
+      assert.equal(tr.status, 'posted');
+
+      const entry = (await get(`/finance/entries/${tr.journal_entry_id}/full`, USERS.merve)).data;
+      assert.equal(entry.currency, 'TRY');
+      assert.equal(Number(entry.total_debit), 40000);
+      assert.equal(Number(entry.total_credit), 40000);
+      const byAccount = Object.fromEntries(
+        entry.lines.map((l: { account_code: string; debit: string; credit: string }) =>
+          [l.account_code, { debit: Number(l.debit), credit: Number(l.credit) }]),
+      );
+      assert.equal(byAccount['100'].debit, 40000);
+      assert.equal(byAccount['102'].credit, 40000);
+    });
+
+    test('kur olmadan çok para birimli virman reddedilir', async () => {
+      const res = await app.inject({
+        method: 'POST', url: '/finance/transfers/execute', headers: as(USERS.merve),
+        payload: { source_bank_account_id: usdBankId, dest_account_id: acc100, amount: 500 },
+      });
+      assert.equal(res.statusCode, 422);
+    });
+
+    test('kur ile tutarsız hedef tutar reddedilir', async () => {
+      const res = await app.inject({
+        method: 'POST', url: '/finance/transfers/execute', headers: as(USERS.merve),
+        payload: {
+          source_bank_account_id: usdBankId, dest_account_id: acc100,
+          amount: 1000, exchange_rate: 40, dest_amount: 12345,
+        },
+      });
+      assert.equal(res.statusCode, 422);
+    });
+
+    test('mizan çok para birimli virmandan sonra dengeli', async () => {
+      const res = await get('/finance/reports/trial-balance', USERS.merve);
+      const debit = res.data.reduce((s: number, r: { debit_total: string }) => s + Number(r.debit_total), 0);
+      const credit = res.data.reduce((s: number, r: { credit_total: string }) => s + Number(r.credit_total), 0);
+      assert.equal(Math.round((debit - credit) * 100), 0);
+    });
+  });
 });
 
 describe('izolasyon', () => {

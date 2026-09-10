@@ -457,7 +457,9 @@ export const financeModule: SezraModule = {
             ${(b.reference as string) ?? null},
             ${(b.description as string) ?? null},
             ${(b.notes as string) ?? null},
-            ${(b.branch_id as string) ?? null}::uuid)`;
+            ${(b.branch_id as string) ?? null}::uuid,
+            ${b.dest_amount != null ? Number(b.dest_amount) : null}::numeric,
+            ${b.exchange_rate != null ? Number(b.exchange_rate) : null}::numeric)`;
         return r;
       });
       reply.code(201);
