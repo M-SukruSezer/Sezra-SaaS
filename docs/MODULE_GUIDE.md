@@ -12,6 +12,23 @@ aralığında** yaşar — sahibi başka modül olsa bile. Bordro→Muhasebe kö
 (`0305_hr_finance_bridge.sql`) finance'a aittir ama hr.payroll_runs'a referans
 verdiği için 0300'lerdedir. Dosya başındaki yorum bu sapmayı açıklamalıdır.
 
+`1100+` aralığı kiracı modülü değildir: platform ve çekirdek-üstü özellikler
+buradadır (destek erişimi, davet akışı, platform yöneticisi, mali müşavir
+erişimi, mail hesabı/mesajları, cari sicil alanları). Her karta çakışmayı
+önleyen bir alt aralık verilir.
+
+### Dış servis entegrasyonu bir modül değil, bir adapter'dır
+
+SMS, mail (IMAP/POP3/SMTP) ve VKN'den firma bilgisi gibi üçüncü taraf
+servisler yeni bir kiracı modülü açmaz. Kalıp `core/src/<alan>/` altında
+sabittir: `types.ts` (sağlayıcı arayüzü) + `registry.ts` (kayıt + seçim) +
+sağlayıcı adapter dosyaları (`netgsm.ts`, `gib.ts`, …). Ürünün geri kalanı
+somut sağlayıcıya değil arayüze bağlanır; sağlayıcı değişince form ve uç
+değişmez. Yeni bir dış servis bağlarken **bu kalıbı kopyalayın, yeni mimari
+icat etmeyin.** İzin/onay kontrolleri (İYS izni, salt-okunur uçlar) arayüz
+katmanında değil `core` fonksiyonlarında yaşamalıdır — API'yi doğrudan çağıran
+bir entegrasyon da aynı sınıra takılsın.
+
 ## 1. Modülü kaydet
 
 ```sql
