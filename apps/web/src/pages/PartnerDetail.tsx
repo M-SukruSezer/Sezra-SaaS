@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeftRight, AtSign, Banknote, Building2, CalendarCheck, CalendarClock,
-  CreditCard, FileText, Hash, Landmark, LifeBuoy, MapPin, MoreHorizontal,
+  Coins, CreditCard, FileText, Hash, Landmark, LifeBuoy, MapPin, MoreHorizontal,
   Network, PackageCheck, Paperclip, Pencil, Percent, Phone, Plus, Receipt,
   ShoppingCart, TrendingUp, Truck, UserRound, Users, Wrench,
 } from 'lucide-react';
@@ -38,7 +38,7 @@ interface Partner {
   address: string | null; district: string | null; city: string | null;
   postal_code: string | null; iban: string | null;
   payment_term_days: number; credit_limit: string | null;
-  sector: string | null; discount_pct: string | null;
+  sector: string | null; discount_pct: string | null; currency: string | null;
   consent_sms: boolean; consent_email: boolean; consent_whatsapp: boolean;
   consent_at: string | null;
   notes: string | null; tags: string[];
@@ -116,7 +116,8 @@ export function PartnerDetail() {
       email: p.email, phone: p.phone, website: p.website,
       address: p.address, district: p.district, city: p.city, postal_code: p.postal_code,
       iban: p.iban, payment_term_days: p.payment_term_days, credit_limit: p.credit_limit,
-      sector: p.sector, discount_pct: p.discount_pct, notes: p.notes,
+      sector: p.sector, discount_pct: p.discount_pct, currency: p.currency ?? 'TRY',
+      notes: p.notes,
       consent_sms: p.consent_sms, consent_email: p.consent_email,
       consent_whatsapp: p.consent_whatsapp,
     });
@@ -646,6 +647,11 @@ function GenelBilgi({ p, ozet, duzenle, alan, yaz, onay, paraBirimi }: {
                 <input value={String(alan('iban'))}
                        onChange={(e) => yaz('iban', e.target.value || null)} />
               </Field>
+              <Field label="Para birimi" hint="Teklif ve faturada ön değer">
+                <input value={String(alan('currency'))} maxLength={3}
+                       style={{ textTransform: 'uppercase' }}
+                       onChange={(e) => yaz('currency', e.target.value.toUpperCase() || 'TRY')} />
+              </Field>
             </div>
           ) : (
             <dl className="ozellik">
@@ -658,6 +664,9 @@ function GenelBilgi({ p, ozet, duzenle, alan, yaz, onay, paraBirimi }: {
               </Ozellik>
               <Ozellik simge={Banknote} etiket="IBAN">
                 {p.iban ? <span className="num">{p.iban}</span> : null}
+              </Ozellik>
+              <Ozellik simge={Coins} etiket="Para Birimi">
+                {p.currency ?? 'TRY'}
               </Ozellik>
             </dl>
           )}

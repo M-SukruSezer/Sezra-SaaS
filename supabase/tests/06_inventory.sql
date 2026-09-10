@@ -350,4 +350,35 @@ select public.t_assert(
     'select inventory.scan_to_count(%L, ''YOK-BOYLE'', 1)', :'scnt')) = 'P0002',
   'Tanınmayan barkod okutulduğunda anlaşılır hata verir');
 
+\echo ''
+\echo '=== 14. ARAÇ (VEHICLE) LOKASYON TİPİ ==='
+reset role;
+-- Araç üzerindeki stoğu takip etmek için yeni lokasyon tipi (1190 migration).
+insert into inventory.locations (tenant_id, warehouse_id, code, name, kind)
+values (:'ornek', :'wh', 'ARAC-34ABC01', '34 ABC 01 sevkiyat aracı', 'vehicle')
+returning id as arac_loc \gset
+
+select public.t_assert(
+  (select kind::text from inventory.locations where id = :'arac_loc') = 'vehicle',
+  'inventory.location_kind artık araç (vehicle) değerini kabul ediyor');
+
+set role sezra_app;
+select set_config('app.user_id', '22222222-2222-2222-2222-222222222222', false);
+select set_config('app.tenant_id', :'ornek', false);
+select coalesce((select sum(quantity) from inventory.v_stock_on_hand
+   where product_id = :'product' and warehouse_id = :'wh'), 0) as soh_once \gset
+
+reset role;
+select inventory.adjust_quant(:'ornek', :'arac_loc', :'product', null, 7) as _av \gset
+
+set role sezra_app;
+select set_config('app.user_id', '22222222-2222-2222-2222-222222222222', false);
+select set_config('app.tenant_id', :'ornek', false);
+select public.t_assert(
+  coalesce((select sum(quantity) from inventory.v_stock_on_hand
+     where product_id = :'product' and warehouse_id = :'wh'), 0) - :'soh_once' = 7,
+  'Araç lokasyonundaki 7 adet stok, elde-stok raporuna (1191) yansıyor',
+  (coalesce((select sum(quantity) from inventory.v_stock_on_hand
+     where product_id = :'product' and warehouse_id = :'wh'), 0) - :'soh_once')::text);
+
 reset role;

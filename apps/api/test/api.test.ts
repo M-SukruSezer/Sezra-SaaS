@@ -1187,3 +1187,131 @@ describe('müşteri portalı', () => {
     assert.equal(me.portal, null);
   });
 });
+
+// ===========================================================================
+// T-033 — ürün/cari kart alanları (1.1) + pasif cari/ürün seçim engeli (1.2)
+// ===========================================================================
+describe('T-033 kart 1.1: ürün/cari eksik kart alanları', () => {
+  let cariId = '';
+  let urunId = '';
+
+  test('cari currency yazılır ve hem kayıtta hem listede döner', async () => {
+    const c = json(await app.inject({
+      method: 'POST', url: '/core/partners', headers: as(USERS.merve),
+      payload: { name: 'T033 Kart Cari', is_customer: true, currency: 'EUR' } }));
+    cariId = (c.data as { id: string }).id;
+    assert.equal(c.data.currency, 'EUR', 'oluşturma yanıtı currency döndürmeli');
+
+    const tekil = json(await app.inject({
+      method: 'GET', url: `/core/partners/${cariId}`, headers: as(USERS.merve) }));
+    assert.equal(tekil.data.currency, 'EUR', 'v_partner_list currency kolonunu taşımalı');
+  });
+
+  test('ürün artikel_no ve shelf_location yazılıp okunur', async () => {
+    const p = json(await app.inject({
+      method: 'POST', url: '/core/products', headers: as(USERS.merve),
+      payload: { sku: 'T033-KART-1', name: 'T033 Kart Ürün', kind: 'stockable',
+                 artikel_no: 'ART-9001', shelf_location: 'A-12-3' } }));
+    urunId = (p.data as { id: string }).id;
+    assert.equal(p.data.artikel_no, 'ART-9001');
+    assert.equal(p.data.shelf_location, 'A-12-3');
+  });
+
+  test('temizlik', async () => {
+    await app.inject({ method: 'DELETE', url: `/core/products/${urunId}`, headers: as(USERS.merve) });
+    await app.inject({ method: 'DELETE', url: `/core/partners/${cariId}`, headers: as(USERS.merve) });
+  });
+});
+
+describe('T-033 kart 1.2: pasif cari/ürün yeni işlemde seçilemez', () => {
+  let cariId = '';
+  let urunId = '';
+  let teklifId = '';
+  let satirId = '';
+
+  test('hazırlık: aktif cari + ürün + onlarla bir taslak teklif', async () => {
+    const c = json(await app.inject({
+      method: 'POST', url: '/core/partners', headers: as(USERS.merve),
+      payload: { name: 'T033 Pasif Cari', is_customer: true } }));
+    cariId = (c.data as { id: string }).id;
+
+    const p = json(await app.inject({
+      method: 'POST', url: '/core/products', headers: as(USERS.merve),
+      payload: { sku: 'T033-PASIF-1', name: 'T033 Pasif Ürün', kind: 'stockable' } }));
+    urunId = (p.data as { id: string }).id;
+
+    const q = json(await app.inject({
+      method: 'POST', url: '/crm/quotations', headers: as(USERS.merve),
+      payload: { partner_id: cariId, issue_date: '2026-02-01', currency: 'TRY' } }));
+    teklifId = (q.data as { id: string }).id;
+
+    const l = await app.inject({
+      method: 'POST', url: '/crm/quotation-lines', headers: as(USERS.merve),
+      payload: { quotation_id: teklifId, sequence: 10, product_id: urunId,
+                 description: 'aktifken eklenen satır', quantity: 2 } });
+    assert.equal(l.statusCode, 201, 'aktif ürünle satır eklenebilmeli');
+    satirId = (json(l).data as { id: string }).id;
+  });
+
+  test('pasif ürün YENİ satırda seçilemez (422 check_violation)', async () => {
+    const d = await app.inject({
+      method: 'PATCH', url: `/core/products/${urunId}`, headers: as(USERS.merve),
+      payload: { is_active: false } });
+    assert.equal(d.statusCode, 200);
+
+    const res = await app.inject({
+      method: 'POST', url: '/crm/quotation-lines', headers: as(USERS.merve),
+      payload: { quotation_id: teklifId, sequence: 20, product_id: urunId,
+                 description: 'pasif ürün', quantity: 1 } });
+    assert.equal(res.statusCode, 422);
+    assert.equal(json(res).error.code, 'check_violation');
+    assert.match(json(res).error.message, /[Pp]asif ürün/);
+  });
+
+  test('pasif cariyle YENİ teklif açılamaz (422)', async () => {
+    const d = await app.inject({
+      method: 'PATCH', url: `/core/partners/${cariId}`, headers: as(USERS.merve),
+      payload: { is_active: false } });
+    assert.equal(d.statusCode, 200);
+
+    const res = await app.inject({
+      method: 'POST', url: '/crm/quotations', headers: as(USERS.merve),
+      payload: { partner_id: cariId, issue_date: '2026-02-05', currency: 'TRY' } });
+    assert.equal(res.statusCode, 422);
+    assert.match(json(res).error.message, /[Pp]asif cari/);
+  });
+
+  test('GEÇMİŞ belge pasifleştirmeden etkilenmez: okunur ve ref-dışı alan güncellenir', async () => {
+    const q = await app.inject({
+      method: 'GET', url: `/crm/quotations/${teklifId}`, headers: as(USERS.merve) });
+    assert.equal(q.statusCode, 200, 'geçmiş teklif hâlâ okunmalı');
+
+    const notUpd = await app.inject({
+      method: 'PATCH', url: `/crm/quotations/${teklifId}`, headers: as(USERS.merve),
+      payload: { notes: 'pasifleştirme sonrası düzenleme' } });
+    assert.equal(notUpd.statusCode, 200, 'geçmiş belgede not güncellenebilmeli');
+
+    const satirUpd = await app.inject({
+      method: 'PATCH', url: `/crm/quotation-lines/${satirId}`, headers: as(USERS.merve),
+      payload: { quantity: 5 } });
+    assert.equal(satirUpd.statusCode, 200, 'pasif ürünlü geçmiş satırda miktar güncellenebilmeli');
+  });
+
+  test('pasif cari ve ürün raporlarda/listede görünmeye devam eder', async () => {
+    const cariler = json(await app.inject({
+      method: 'GET', url: '/core/partners?is_active=false&limit=200', headers: as(USERS.merve) }));
+    assert.ok((cariler.data as { id: string }[]).some((x) => x.id === cariId),
+      'pasif cari is_active=false raporunda görünmeli');
+
+    const urunler = json(await app.inject({
+      method: 'GET', url: '/core/products?is_active=false&limit=200', headers: as(USERS.merve) }));
+    assert.ok((urunler.data as { id: string }[]).some((x) => x.id === urunId),
+      'pasif ürün is_active=false raporunda görünmeli');
+  });
+
+  test('temizlik', async () => {
+    await app.inject({ method: 'DELETE', url: `/crm/quotations/${teklifId}`, headers: as(USERS.merve) });
+    await app.inject({ method: 'DELETE', url: `/core/products/${urunId}`, headers: as(USERS.merve) });
+    await app.inject({ method: 'DELETE', url: `/core/partners/${cariId}`, headers: as(USERS.merve) });
+  });
+});

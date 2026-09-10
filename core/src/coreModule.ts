@@ -28,7 +28,7 @@ export const coreModule: SezraModule = {
         'tags', 'owner_id', 'is_active', 'created_at', 'updated_at',
         'owner_name', 'branch_name',
         'sector', 'discount_pct', 'consent_sms', 'consent_email',
-        'consent_whatsapp', 'consent_at', 'website',
+        'consent_whatsapp', 'consent_at', 'website', 'currency',
         // T-028: VKN sorgusundan gelebilen resmi sicil alanlari.
         'mersis_no', 'tax_office_code', 'tax_liability_type'],
       filterable: ['branch_id', 'code', 'name', 'is_customer', 'is_supplier', 'is_employee',
@@ -41,6 +41,7 @@ export const coreModule: SezraModule = {
         // İYS izni KANAL BAZINDA: tek bayrak olsaydı SMS'e izin veren
         // müşteriye e-posta da gönderilirdi.
         'sector', 'discount_pct', 'consent_sms', 'consent_email', 'consent_whatsapp',
+        'currency',
         // T-028: VKN sorgusu bunlari doldurur; kullanici sonradan elle duzeltebilir.
         'mersis_no', 'tax_office_code', 'tax_liability_type'],
       searchable: ['name', 'tax_no', 'email', 'phone', 'city'],
@@ -53,10 +54,11 @@ export const coreModule: SezraModule = {
       columns: ['id', 'sku', 'barcode', 'name', 'description', 'kind', 'category_id', 'uom_id',
         'purchase_uom_id', 'sale_price', 'purchase_price', 'currency', 'sale_tax_id',
         'purchase_tax_id', 'is_sellable', 'is_purchasable', 'is_active', 'attributes',
-        'created_at', 'updated_at'],
+        'artikel_no', 'shelf_location', 'created_at', 'updated_at'],
       writable: ['sku', 'barcode', 'name', 'description', 'kind', 'category_id', 'uom_id',
         'purchase_uom_id', 'sale_price', 'purchase_price', 'currency', 'sale_tax_id',
-        'purchase_tax_id', 'is_sellable', 'is_purchasable', 'is_active', 'attributes'],
+        'purchase_tax_id', 'is_sellable', 'is_purchasable', 'is_active', 'attributes',
+        'artikel_no', 'shelf_location'],
       searchable: ['name', 'sku', 'barcode'],
       defaultSort: 'name', defaultOrder: 'asc',
     });
