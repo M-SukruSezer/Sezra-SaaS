@@ -24,15 +24,21 @@ SGK/bordro) çekirdeğe gömülü.
 | **Faz 4** — Destek Masası | Tamam — veri katmanı + UI testli (SLA, yazışma, memnuniyet); API katmanı çalışır, HTTP testleri şu an ekleniyor |
 | **Platform** — Mali Müşavir erişimi | Tamam, testli — davet akışı, salt-okunur RLS, müşavir paneli (`/musavir`) |
 | **Platform** — Mail hesabı bağlama | Tamam, testli — IMAP/POP3 bağlantı kurulumu; şifreli kimlik bilgisi saklaması; Ayarlar > Mail Hesapları ekranı |
+| **Platform** — Mail modülü (gelen kutusu + gönderme) | Tamam, testli — IMAP/POP3 çekme + artımlı senkron; SMTP gönderme; Mail ekranı (`/mail`) |
+| **CRM/Cari** — VKN'den firma bilgisi | Tamam, testli — "VKN'den getir" adapter sorgusu (GİB + opsiyonel ücretli sağlayıcı); resmi sicil alanları (MERSİS no, vergi dairesi kodu, mükellefiyet türü) |
+| **Faz 1** — Temel veri tamamlama (T-033) | Tamam, testli — araç lokasyon tipi, ürün artikel no / raf yeri, cari varsayılan para birimi, pasif cari/ürün seçim engeli |
 
-**Otomatik test sayısı** — veritabanı katmanında 16 SQL paketi (kiracı ve şube
+**Otomatik test sayısı** — veritabanı katmanında 18 SQL paketi (kiracı ve şube
 izolasyonu, kayıt kuralları, ücret ve maliyet gizliliği, modül aktivasyonu,
 KDV/tevkifat, çift taraflı kayıt, muhasebe değişmezliği, kapalı dönem, bordro
 hesabı, kademeli tedarikçi fiyatı, kısmi mal kabul, hareketli ortalama maliyet,
 negatif stok engeli, FEFO, olay yayını, denetim izi, mali müşavir RLS izolasyonu,
-mail hesabı gizli bilgi sızıntısı), API katmanında 7 paket / 166 test (çekirdek,
-CRM, Muhasebe, platform yönetimi, davet akışı, mali müşavir uçları, mail hesabı
-uçları).
+mail hesabı gizli bilgi sızıntısı, cari resmi sicil alanları, mail mesajı RLS ve
+KVKK saklama sınırı), API katmanında 9 paket / 200 test (çekirdek + CRM, Muhasebe,
+modüller, platform yönetimi, davet akışı, mali müşavir uçları, mail hesabı uçları,
+mail modülü akışı, VKN firma sorgusu). Son ölçüm: `bash scripts/test-api.sh` →
+API 200/200, `npm run typecheck` → 0 hata, `python3 scripts/check_no_emoji.py` →
+359 dosya temiz.
 
 **Faz 1 tamamlandı**: CRM & Satış, Muhasebe & Finans, İnsan Kaynakları & Bordro,
 Satın Alma & Tedarikçi.
@@ -264,9 +270,79 @@ ortam değişkenleriyle yapılandırılır; yapılandırılmamış sağlayıcıl
   kullanılmaz (o `to_jsonb(new)` ile şifreli blobu audit_log'a yazardı).
 - RLS: kullanıcı yalnızca kendi hesaplarını görür; destek modu bu tabloyu atlayamaz.
 
-`POST /core/mailAccounts/verify` ucu kaydedilmeden önce gerçek bağlantı testi
-("Bağlantıyı test et") yapar. Kapsam bu kartta yalnızca **bağlantı kurulumudur**;
-posta çekme/gönderme T-029'dadır.
+`POST /core/mail/accounts/:id/verify` ucu kaydedilen hesapta gerçek bağlantı
+testi ("Bağlantıyı test et") yapar. Posta çekme ve gönderme bir sonraki bölümde.
+
+### Mail modülü — gelen kutusu ve gönderme
+
+Bağlantı kurulumunun (yukarıda) üzerine gelen posta **çekme ve gönderme** eklenir;
+yine harici kütüphane yok, yalnızca `node:net` + `node:tls`
+(`core/src/mail/fetch.ts`, `send.ts`).
+
+- **Çekme salt-okumadır**: IMAP'te `BODY.PEEK`, POP3'te `DELE` yok — sunucudaki
+  hiçbir mesaj silinmez ya da okundu işaretlenmez.
+- **Artımlı senkron**: IMAP'te son çekilen UID'den sonrası, POP3'te bilinen UIDL
+  kümesinde olmayanlar. Her koşuda mesaj sayısı ve mesaj başına bayt üst sınırı
+  var; bir hesap paneli ve veritabanını boğamaz. `UIDVALIDITY` değişirse yerel
+  mesajlar boşaltılıp baştan çekilir.
+- **KVKK saklama sınırı**: hesap başına en fazla 500 gelen mesaj saklanır
+  (`core.mail_message_keep()`); senkron sonrası `core.mail_messages_trim()` en
+  eskileri siler. Gelen kutusu bir arşiv değil çalışma penceresidir. Giden
+  mesajlar (gönderim kanıtı) bu sınırdan muaftır.
+- **Gövde HAM saklanır ama arayüz ham render etmez**: `body_text` her zaman
+  doldurulur; `body_html` yalnızca temizlenerek gösterilir (XSS yolu).
+- **RLS yalnızca sahip** (`owner_id = core.current_user_id()`). Kiracı yöneticisi,
+  destek modu ve mali müşavir dahil kimse başkasının postasını göremez;
+  politikada onlar için OR dalı yoktur. `core.attach_audit` bu tablolarda bilerek
+  çağrılmaz — `to_jsonb(new)` mesaj gövdesini `audit_log`'a yazardı.
+- SMTP parolası `secret_cipher`'dan yalnızca gönderim anında çözülür; hiçbir
+  yanıta, loga veya hata mesajına girmez. Başarısız gönderim de kaydedilir
+  (`send_status = 'failed'`) — denetimde "neden gitmedi" cevabı kalsın.
+
+UI: `apps/web/src/pages/Mail.tsx` — hesap seçimi, mesaj listesi, okuma,
+yaz/yanıtla.
+
+### Cari açarken VKN'den firma bilgisi
+
+"Yeni cari" formundaki **VKN'den getir** butonu, 10 haneli vergi numarasını kendi
+backend'imize sorar; backend sağlayıcıya gider ve yalnızca forma yazılabilir
+alanları döndürür. Akış her zaman
+frontend -> kendi backend -> sağlayıcı -> geri; API anahtarı istemciye sızmaz, uç
+yalnızca `configured` bool verir.
+
+Sağlayıcı seçimi ertelenmiş bir karardır (SMS ve e-Fatura'daki adapter kalıbının
+aynısı, `core/src/company/`): bugün GİB'in herkese açık listesi, opsiyonel olarak
+daha zengin veri veren ücretli bir sağlayıcı. VKN sağlayıcılara sırayla sorulur,
+ilk "bulundu" yanıtı kazanır.
+
+`core.partners` üç nullable sicil alanı kazandı: `mersis_no` (16 hane),
+`tax_office_code` (GİB vergi dairesi kodu — dairenin *adından* ayrı) ve
+`tax_liability_type` (mükellefiyet türü, serbest metin). CHECK kısıtları yalnızca
+dolu değeri sınar; eski cariler NULL kalır. Kullanıcı her durumda bilgileri elle
+girebilir; teknik hata detayı (sağlayıcı, durum kodu, ham gövde) yanıta konmaz ve
+VKN loglanmaz.
+
+### T-033 Faz 1 — temel veri tamamlama
+
+- **Araç lokasyon tipi**: `inventory.location_kind` enum'una `vehicle` eklendi;
+  araç üzerindeki stok `inventory.v_stock_on_hand` raporunda ürün-depo kırılımında
+  görünür hale geldi.
+- **Ürün kartı**: `artikel_no` (üreticinin kendi ürün kodu, SKU'dan bağımsız
+  bilgi alanı) ve `shelf_location` (depoda raf/göz kısa notu — konum yönetimi yine
+  `inventory.locations` üzerinde yapılır).
+- **Cari kartı**: `currency` (varsayılan belge para birimi, ISO 4217; NULL =
+  sistem varsayılanı). `core.v_partner_list` görünümü kolonu içerecek şekilde
+  yeniden oluşturuldu.
+- **Pasif seçim engeli**: pasif (`is_active = false`) bir cari ya da ürün yeni
+  ticari belgede seçilemez. Kural formda gizlemekle değil **veritabanı
+  tetikleyicisiyle** uygulanır (`crm.quotations` / `sale_orders`,
+  `purchasing.orders`, `pos.orders` başlıkları; ilgili satır tabloları ürün için).
+  Tetikleyici INSERT'te ve yalnızca `partner_id` / `product_id` **değiştiğinde**
+  çalışır — geçmiş belgelerde tutar/not güncellemek serbest kalır, ama var olan
+  bir belgeyi pasif bir kayda yönlendirmek engellenir. SELECT'e hiç dokunulmaz:
+  raporlar ve geçmiş belge listeleri pasif kayıtları görmeye devam eder. Fatura,
+  tahsilat/ödeme ve mal kabul bilerek kapsam dışıdır (eski borcun kapatılması ve
+  verilmiş siparişin mal kabulü her zaman tamamlanabilmeli).
 
 ## Hızlı başlangıç (yerel)
 
@@ -333,9 +409,13 @@ rolüyle bağlanmamalıdır** — bağlanırsa RLS bir güvenlik sınırı olmak
 supabase/migrations/   0001-0099 çekirdek, 0100 CRM, 0200 Muhasebe, 0300 İK,
                        0400 Satın Alma, 0500 Envanter, 0600 Kalite,
                        0700 Bakım, 0800 POS, 0900 Proje, 1000 Destek,
-                       1100-1139 destek erişimi + davet + platform yöneticisi,
+                       1100-1140 destek erişimi + davet + platform yöneticisi,
                        1150-1151 mali müşavir erişimi,
                        1160 mail hesabı bağlama,
+                       1170 cari resmi sicil alanları (VKN sorgusu),
+                       1180 mail mesaj saklama + senkron durumu,
+                       1190-1194 T-033 Faz 1 (araç lokasyonu, ürün/cari alanları,
+                                 pasif seçim engeli),
                        9999 yetkiler
 supabase/seed/         demo kiracı (Örnek Ticaret A.Ş.)
 supabase/tests/        RLS izolasyon ve iş akışı testleri
@@ -345,9 +425,17 @@ core/                  çekirdek TypeScript katmanı
                          events.ts          olay işleyici
                          coreModule         cari, ürün, vergi, kullanıcı uçları
                          accountantRoutes   mali müşavir davet / panel uçları
-                         mailRoutes         mail hesabı bağlama uçları
+                         mailRoutes         mail hesabı bağlama + gelen kutusu +
+                                            gönderme uçları
+                         companyRoutes      VKN'den firma bilgisi sorgulama uçları
                          mail/              adapter deseni: crypto.ts (AES-256-GCM),
-                                            types.ts (IMAP/POP3/Graph/Gmail), verify.ts
+                                            types.ts (IMAP/POP3/Graph/Gmail),
+                                            verify.ts (bağlantı testi),
+                                            fetch.ts (IMAP/POP3 çekme), send.ts (SMTP),
+                                            ssrfGuard.ts
+                         company/           adapter deseni: types.ts + registry.ts +
+                                            gib.ts / paid.ts sağlayıcılar,
+                                            vkn.ts (VKN/TCKN doğrulama)
 modules/crm/           CRM API modülü
 modules/finance/       Muhasebe & Finans API modülü
 modules/hr/            İK & Bordro API modülü
