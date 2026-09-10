@@ -289,8 +289,9 @@ yine harici kütüphane yok, yalnızca `node:net` + `node:tls`
   (`core.mail_message_keep()`); senkron sonrası `core.mail_messages_trim()` en
   eskileri siler. Gelen kutusu bir arşiv değil çalışma penceresidir. Giden
   mesajlar (gönderim kanıtı) bu sınırdan muaftır.
-- **Gövde HAM saklanır ama arayüz ham render etmez**: `body_text` her zaman
-  doldurulur; `body_html` yalnızca temizlenerek gösterilir (XSS yolu).
+- **Gövde HAM saklanır ama arayüz ham render etmez** (XSS yolu): `body_text` her
+  zaman doldurulur ve panel yalnızca onu gösterir; `body_html` hiç render
+  edilmez, mesajın HTML olduğu bir not olarak belirtilir.
 - **RLS yalnızca sahip** (`owner_id = core.current_user_id()`). Kiracı yöneticisi,
   destek modu ve mali müşavir dahil kimse başkasının postasını göremez;
   politikada onlar için OR dalı yoktur. `core.attach_audit` bu tablolarda bilerek
