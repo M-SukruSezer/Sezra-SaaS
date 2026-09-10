@@ -266,3 +266,68 @@ yenisini oluşturmaktır — davet listesini okuyabilen biri davetleri kabul
 edebilmemeli. Personel adresine portal daveti gönderilemez: kabul edilseydi
 `portal_partner_id` mevcut personel üyeliğinin üzerine yazılır ve kişi hem
 çalışan hem portal kullanıcısı olurdu.
+
+## 17. Mali müşavir erişimi: salt-okunurluk yapısaldır
+
+Dış mali müşavir bir kiracının verisini görebilir ama **yazamaz**. Bu kısıt
+uygulama katmanında bir `if` değil, RLS politika üreticisinde bir yokluktur:
+`core.apply_rls()` `musavir` terimini yalnızca `for select` politikasına koyar;
+`insert` / `update` / `delete` üreticileri o terimi hiç görmez. Uygulama kodundaki
+bir hata bile müşaviri yazar konumuna getiremez, çünkü yazma yolu için politika
+**yok**.
+
+Reddedilen alternatif: normal rol + "salt-okunur" izin seti. İzinle kısıtlamak,
+her yeni yazma ucunda izni doğru daraltmayı hatırlamaya bağlıdır; unutulan tek uç
+sızıntıdır. Müşavir istekleri normal uçlara `x-tenant-id` + `x-accountant-mode: on`
+başlıklarıyla gelir ve sınırı `core.accountant_tenant_id()` (yalnızca for-select)
+çizer. Müşavir kendi doğal kiracısını görmeye devam eder; cross-tenant sızıntı
+yoktur (test 15).
+
+## 18. Mail hesabı sırları: uygulama şifreler, veritabanı düz metni görmez
+
+IMAP/POP3/SMTP parolası ve OAuth token'ı `core.mail_accounts.secret_cipher`
+içinde **AES-256-GCM** ile şifreli durur (`core/src/mail/crypto.ts`). Anahtar
+ortam değişkeninden gelir; veritabanına hiç verilmez. Anahtar yoksa kod sessizce
+düz metne düşmez — hata döner.
+
+Sır **hiçbir okuma yolundan** geri gelmez: `core.mail_account_list()` şifreli
+blobu SELECT etmez, yalnızca `has_secret: bool` döner; API yanıtı, log ve hata
+mesajı de öyle. Denetim izi bu tabloda genel `core.attach_audit` ile **değil**,
+scrub'lu özel bir tetikleyiciyle yazılır: `attach_audit` `to_jsonb(new)` ile
+şifreli blobu `audit_log`'a kopyalardı. Aynı ilke `core.mail_messages` için de
+geçerli — o tablo hiç denetlenmez, çünkü gövde ve başlık kişisel veridir.
+
+## 19. Firma bilgisi sorgulama: yine adapter, yine ertelenmiş sağlayıcı
+
+VKN'den firma sicil bilgisi getirme, SMS (§15) ve e-Fatura (§12) ile aynı kalıbı
+izler: ürünün geri kalanı somut bir kaynağa değil `CompanyProvider` arayüzüne
+bağlanır (`core/src/company/`). Bugün GİB'in herkese açık listesi, yarın ücretli
+bir entegrasyon — adapter değişir, form ve uç değişmez. VKN sağlayıcılara sırayla
+sorulur, ilk "bulundu" kazanır.
+
+Akış daima frontend -> kendi backend -> sağlayıcı -> geri. API anahtarı istemciye
+sızmaz; `GET /core/company/providers` yalnızca `configured` bool verir. Teknik
+hata detayı (sağlayıcı, durum kodu, ham gövde) kullanıcı yanıtına konmaz — her
+durumda "elle girebilirsiniz" gösterilir — ve VKN loglanmaz. Sağlayıcı uç
+noktası kullanıcıdan gelmez; sabittir ve yalnızca ortam değişkeniyle değişir
+(`GIB_EFATURA_WS_URL` vb.), zaman aşımıyla sınırlıdır — mail "bağlantıyı test et"
+ucundaki serbest-metin `host` SSRF sorunu (§ mail, T-031) burada yoktur.
+
+## 20. Pasif kayıt: yeni işlemde engel, geçmişte serbest
+
+Pasifleştirilmiş bir cari ya da ürün yeni ticari belgede seçilemez, ama geçmiş
+belgeleri ve raporları korunur. Kural **veritabanı tetikleyicisinde** yaşar
+(`core.assert_ref_partner_active` / `assert_ref_product_active`), formda gizlemede
+değil: API'yi doğrudan çağıran bir entegrasyon da engele takılır.
+
+Tetikleyici `BEFORE INSERT` ve — `WHEN (new.partner_id is distinct from
+old.partner_id)` koşuluyla — yalnızca referans **değiştiğinde** `BEFORE UPDATE`
+çalışır. Böylece eski bir belgede tutar/not güncellemek, cari sonradan
+pasifleştirilmiş olsa bile serbest kalır; ama var olan belgeyi pasif bir kayda
+yönlendirmek engellenir. `SELECT`'e hiç dokunulmaz.
+
+Kapsam, kullanıcının cari/ürün **seçerek** yeni belge başlattığı yerlerdir
+(`crm.quotations` / `sale_orders`, `purchasing.orders`, `pos.orders` ve satır
+tabloları). Fatura, tahsilat/ödeme ve mal kabul bilerek kapsam dışıdır: verilmiş
+bir siparişin mal kabulü ve pasif carinin açık bakiyesinin tahsilatı her zaman
+tamamlanabilmelidir.
