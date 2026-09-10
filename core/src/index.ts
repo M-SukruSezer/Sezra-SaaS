@@ -18,6 +18,10 @@ export {
 export { EventWorker } from './events.js';
 export { encryptSecret, decryptSecret, isSecretStoreConfigured } from './mail/crypto.js';
 export { verifyMailConnection, type VerifyResult, type VerifyCategory } from './mail/verify.js';
+export { parseMail, decodeWords, htmlToText, makeSnippet, type ParsedMail } from './mail/mime.js';
+export { fetchMail, type FetchOptions, type FetchResult, type FetchedMessage } from './mail/fetch.js';
+export { sendMail, isEmail, smtpSettingsFromConfig, type SendMessage, type SendResult } from './mail/send.js';
+export type { MailErrorCategory } from './mail/net.js';
 export type {
   MailProvider, MailAccountConfig, MailSecret, MailStatus, MailAccountRow,
 } from './mail/types.js';

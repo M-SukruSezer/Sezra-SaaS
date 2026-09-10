@@ -22,6 +22,14 @@ export interface MailAccountConfig {
   username?: string;
   /** OAuth kapsamları (Graph/Gmail). Bilgi amaçlı. */
   scopes?: string[];
+  /**
+   * SMTP gönderim ayarları (IMAP/POP3 hesapları için). Gizli DEĞİL: parola
+   * yine secret_cipher'da. Verilmezse host'tan makul varsayılan türetilir
+   * (imap.x -> smtp.x, ssl -> 465, starttls -> 587). Bunun için migration yok.
+   */
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_security?: MailSecurity;
 }
 
 /**
