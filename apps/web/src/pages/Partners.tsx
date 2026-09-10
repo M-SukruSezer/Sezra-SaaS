@@ -47,6 +47,79 @@ export function Partners() {
     } catch (err) { setError(err); }
   };
 
+  /**
+   * VKN'den firma bilgisi getirme.
+   *
+   * Akis: Frontend -> KENDI backend'imiz -> saglayici -> geri. Frontend ucuncu
+   * tarafa hic gitmez. Gelen her alan SONRADAN ELLE DUZENLENEBILIR; kilitlemeyiz
+   * ve kullanicinin zaten yazdigi alanin uzerine yazmayiz.
+   */
+  const [firmaDurum, setFirmaDurum] = useState<
+    | { tip: 'bos' }
+    | { tip: 'yukleniyor' }
+    | { tip: 'sonuc'; ton: 'basarili' | 'bulunamadi' | 'hata' | 'bilgi'; mesaj: string }
+  >({ tip: 'bos' });
+
+  const firmaGetir = async (vkn: string) => {
+    setFirmaDurum({ tip: 'yukleniyor' });
+    try {
+      const r = await api.get<{ data: {
+        found: boolean; status: string; message: string;
+        company?: Record<string, string>;
+      } }>(`/core/company/lookup?tax_no=${encodeURIComponent(vkn)}`);
+      const d = r.data;
+      if (d.found && d.company) {
+        setDraft((cur) => {
+          const base = { ...(cur ?? {}) } as Record<string, unknown>;
+          for (const [k, v] of Object.entries(d.company!)) {
+            // Yalnizca BOS alani doldur -- kullanicinin girdisi korunur.
+            if (v && (base[k] === undefined || base[k] === null || base[k] === '')) base[k] = v;
+          }
+          return base;
+        });
+        setFirmaDurum({ tip: 'sonuc', ton: 'basarili', mesaj: d.message });
+      } else if (d.status === 'tckn') {
+        setFirmaDurum({ tip: 'sonuc', ton: 'bilgi', mesaj: d.message });
+      } else if (d.status === 'error') {
+        setFirmaDurum({ tip: 'sonuc', ton: 'hata', mesaj: d.message });
+      } else {
+        setFirmaDurum({ tip: 'sonuc', ton: 'bulunamadi', mesaj: d.message });
+      }
+    } catch (err) {
+      setFirmaDurum({
+        tip: 'sonuc', ton: 'hata',
+        mesaj: err instanceof Error && err.message
+          ? err.message
+          : 'Firma bilgisi sorgulanamadı. Bilgileri manuel olarak girebilirsiniz.',
+      });
+    }
+  };
+
+  // 10 hane tamamlaninca debounce ile otomatik sorgu. Kullanici butona da basabilir.
+  const vknDeger = draft ? String(draft.tax_no ?? '').replace(/\D/g, '') : '';
+  useEffect(() => {
+    if (vknDeger.length === 11) {
+      // 11 hane = TCKN. Firma sorgusu yapmayiz; backend'e hic gitmeyiz.
+      setFirmaDurum({
+        tip: 'sonuc', ton: 'bilgi',
+        mesaj: 'Bu bir TC kimlik numarası; firma sorgusu yalnızca 10 haneli VKN için yapılır.',
+      });
+      return;
+    }
+    if (vknDeger.length !== 10) { setFirmaDurum({ tip: 'bos' }); return; }
+    const t = setTimeout(() => void firmaGetir(vknDeger), 600);
+    return () => clearTimeout(t);
+  }, [vknDeger]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Durumun kullaniciya gorunen metni ve tonu (aria-live ile duyurulur).
+  const firmaMesaji = firmaDurum.tip === 'yukleniyor'
+    ? 'Firma bilgileri sorgulanıyor...'
+    : firmaDurum.tip === 'sonuc' ? firmaDurum.mesaj : null;
+  const firmaRenk = firmaDurum.tip === 'sonuc' && firmaDurum.ton === 'basarili' ? 'var(--c-ok)'
+    : firmaDurum.tip === 'sonuc' && firmaDurum.ton === 'hata' ? 'var(--c-danger)'
+    : firmaDurum.tip === 'sonuc' && firmaDurum.ton === 'bilgi' ? 'var(--c-info)'
+    : undefined;
+
   const kolonlar: Kolon<Partner>[] = [
     {
       anahtar: 'code', baslik: 'Kod', sirala: true, suz: 'metin',
@@ -131,17 +204,49 @@ export function Partners() {
               <input value={String(draft.name ?? '')} autoFocus
                      onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
             </Field>
-            <Field label="VKN / TCKN" hint="10 ya da 11 hane">
-              <input value={String(draft.tax_no ?? '')}
-                     onChange={(e) => setDraft({ ...draft, tax_no: e.target.value || null })} />
+            <Field label="VKN / TCKN" hint="Firma bilgileri için 10 haneli VKN girin (11 hane = TCKN)">
+              <div className="row">
+                <input value={String(draft.tax_no ?? '')} style={{ flex: 1 }}
+                       onChange={(e) => setDraft({ ...draft, tax_no: e.target.value || null })} />
+                <button type="button" className="btn btn-sm"
+                        disabled={vknDeger.length !== 10 || firmaDurum.tip === 'yukleniyor'}
+                        onClick={() => void firmaGetir(vknDeger)}>
+                  {firmaDurum.tip === 'yukleniyor' ? 'Sorgulanıyor…' : "VKN'den getir"}
+                </button>
+              </div>
+              {firmaMesaji && (
+                <span className="hint" role="status" aria-live="polite" style={{ color: firmaRenk }}>
+                  {firmaMesaji}
+                </span>
+              )}
             </Field>
             <Field label="Vergi dairesi">
               <input value={String(draft.tax_office ?? '')}
                      onChange={(e) => setDraft({ ...draft, tax_office: e.target.value })} />
             </Field>
+            <Field label="Vergi dairesi kodu">
+              <input value={String(draft.tax_office_code ?? '')}
+                     onChange={(e) => setDraft({ ...draft, tax_office_code: e.target.value || null })} />
+            </Field>
+            <Field label="MERSİS No">
+              <input value={String(draft.mersis_no ?? '')}
+                     onChange={(e) => setDraft({ ...draft, mersis_no: e.target.value || null })} />
+            </Field>
+            <Field label="Mükellefiyet türü">
+              <input value={String(draft.tax_liability_type ?? '')}
+                     onChange={(e) => setDraft({ ...draft, tax_liability_type: e.target.value || null })} />
+            </Field>
+            <Field label="Adres">
+              <input value={String(draft.address ?? '')}
+                     onChange={(e) => setDraft({ ...draft, address: e.target.value || null })} />
+            </Field>
             <Field label="Şehir">
               <input value={String(draft.city ?? '')}
                      onChange={(e) => setDraft({ ...draft, city: e.target.value })} />
+            </Field>
+            <Field label="İlçe">
+              <input value={String(draft.district ?? '')}
+                     onChange={(e) => setDraft({ ...draft, district: e.target.value || null })} />
             </Field>
             <Field label="E-posta">
               <input type="email" value={String(draft.email ?? '')}
