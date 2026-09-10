@@ -11,6 +11,7 @@ import { registerNotifications } from './notifications.js';
 import { registerPartnerDetail, registerPartnerRelation } from './partnerDetail.js';
 import { registerSmsRoutes } from './smsRoutes.js';
 import { registerMailRoutes } from './mailRoutes.js';
+import { registerCompanyRoutes } from './companyRoutes.js';
 import { registerPortalRoutes } from './portalRoutes.js';
 import { registerAccountantRoutes } from './accountantRoutes.js';
 
@@ -27,7 +28,9 @@ export const coreModule: SezraModule = {
         'tags', 'owner_id', 'is_active', 'created_at', 'updated_at',
         'owner_name', 'branch_name',
         'sector', 'discount_pct', 'consent_sms', 'consent_email',
-        'consent_whatsapp', 'consent_at', 'website'],
+        'consent_whatsapp', 'consent_at', 'website',
+        // T-028: VKN sorgusundan gelebilen resmi sicil alanlari.
+        'mersis_no', 'tax_office_code', 'tax_liability_type'],
       filterable: ['branch_id', 'code', 'name', 'is_customer', 'is_supplier', 'is_employee',
         'city', 'owner_id', 'is_active', 'tax_no'],
       sortable: ['name', 'code', 'city', 'created_at', 'updated_at'],
@@ -37,7 +40,9 @@ export const coreModule: SezraModule = {
         'credit_limit', 'notes', 'tags', 'owner_id', 'is_active',
         // İYS izni KANAL BAZINDA: tek bayrak olsaydı SMS'e izin veren
         // müşteriye e-posta da gönderilirdi.
-        'sector', 'discount_pct', 'consent_sms', 'consent_email', 'consent_whatsapp'],
+        'sector', 'discount_pct', 'consent_sms', 'consent_email', 'consent_whatsapp',
+        // T-028: VKN sorgusu bunlari doldurur; kullanici sonradan elle duzeltebilir.
+        'mersis_no', 'tax_office_code', 'tax_liability_type'],
       searchable: ['name', 'tax_no', 'email', 'phone', 'city'],
       defaultSort: 'name', defaultOrder: 'asc',
     });
@@ -370,6 +375,7 @@ export const coreModule: SezraModule = {
     registerPartnerDetail(app);
     registerSmsRoutes(app);
     registerMailRoutes(app);
+    registerCompanyRoutes(app);
     registerPortalRoutes(app);
     registerAccountantRoutes(app);
 
