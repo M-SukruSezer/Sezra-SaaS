@@ -4,6 +4,7 @@ import { withContext } from './db.js';
 import { badRequest, notFound, translatePgError } from './errors.js';
 import { decryptSecret, encryptSecret, isSecretStoreConfigured } from './mail/crypto.js';
 import { verifyMailConnection } from './mail/verify.js';
+import { isBlockedLiteralIp } from './mail/ssrfGuard.js';
 import { MAIL_PROVIDERS, type MailAccountConfig, type MailProvider, type MailSecret } from './mail/types.js';
 
 /* ===========================================================================
@@ -40,6 +41,9 @@ function normalizeConfig(provider: MailProvider, raw: unknown): MailAccountConfi
   if (provider === 'imap' || provider === 'pop3') {
     const host = typeof c.host === 'string' ? c.host.trim() : '';
     if (!host) throw badRequest('host zorunlu (IMAP/POP3)');
+    // SSRF sinir katmani: apacik ozel/loopback/link-local literal IP'yi reddet.
+    // Ad tabanli (DNS) hedefler baglanti aninda ssrfGuard ile dogrulanir.
+    if (isBlockedLiteralIp(host)) throw badRequest('Bu sunucu adresine izin verilmiyor (ic ag / ozel adres)');
     out.host = host;
     const security = c.security === 'starttls' || c.security === 'none' ? c.security : 'ssl';
     out.security = security;

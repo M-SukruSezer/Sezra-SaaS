@@ -11,6 +11,7 @@
  */
 import net from 'node:net';
 import tls from 'node:tls';
+import { resolveSafeAddress } from './ssrfGuard.js';
 import type { MailAccountConfig, MailSecurity } from './types.js';
 
 export type VerifyCategory = 'auth' | 'network' | 'tls' | 'protocol' | 'ok';
@@ -33,7 +34,10 @@ const DETAIL: Record<Exclude<VerifyCategory, 'ok'>, string> = {
 
 function classifyError(err: NodeJS.ErrnoException): VerifyCategory {
   const code = err.code ?? '';
-  if (['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'ECONNRESET']
+  // SSRF korumasi bir host'u engellediginde / cozemediginde: kullaniciya
+  // ULASILAMAYAN sunucudan AYIRT EDILEMEYEN bir yanit ver (ic hedefi teyit etme).
+  if (['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'ECONNRESET',
+    'mail_host_forbidden', 'mail_host_unresolved']
     .includes(code)) return 'network';
   if (code.startsWith('ERR_TLS') || code.startsWith('ERR_SSL') || code === 'EPROTO'
     || /certificate|self-signed|SSL|TLS|wrong version number/i.test(err.message)) return 'tls';
@@ -59,9 +63,12 @@ function readUntil(sock: net.Socket, test: (buf: string) => boolean): Promise<st
   });
 }
 
-function connect(host: string, port: number, secure: boolean): Promise<net.Socket> {
+async function connect(host: string, port: number, secure: boolean): Promise<net.Socket> {
+  // SSRF: ada COZULEN adresi dogrula, sonra IP ile baglan (rebinding'e karsi);
+  // SNI/sertifika icin orijinal host'u `servername` olarak koru.
+  const ip = await resolveSafeAddress(host);
   return new Promise((resolve, reject) => {
-    const opts = { host, port, servername: host };
+    const opts = { host: ip, port, servername: host };
     const sock = secure
       ? tls.connect({ ...opts, rejectUnauthorized: false }, () => resolve(sock))
       : net.connect(opts, () => resolve(sock));
