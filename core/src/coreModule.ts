@@ -27,7 +27,7 @@ export const coreModule: SezraModule = {
         'tags', 'owner_id', 'is_active', 'created_at', 'updated_at',
         'owner_name', 'branch_name',
         'sector', 'discount_pct', 'consent_sms', 'consent_email',
-        'consent_whatsapp', 'consent_at', 'website'],
+        'consent_whatsapp', 'consent_at', 'website', 'currency'],
       filterable: ['branch_id', 'code', 'name', 'is_customer', 'is_supplier', 'is_employee',
         'city', 'owner_id', 'is_active', 'tax_no'],
       sortable: ['name', 'code', 'city', 'created_at', 'updated_at'],
@@ -37,7 +37,8 @@ export const coreModule: SezraModule = {
         'credit_limit', 'notes', 'tags', 'owner_id', 'is_active',
         // İYS izni KANAL BAZINDA: tek bayrak olsaydı SMS'e izin veren
         // müşteriye e-posta da gönderilirdi.
-        'sector', 'discount_pct', 'consent_sms', 'consent_email', 'consent_whatsapp'],
+        'sector', 'discount_pct', 'consent_sms', 'consent_email', 'consent_whatsapp',
+        'currency'],
       searchable: ['name', 'tax_no', 'email', 'phone', 'city'],
       defaultSort: 'name', defaultOrder: 'asc',
     });
@@ -48,10 +49,11 @@ export const coreModule: SezraModule = {
       columns: ['id', 'sku', 'barcode', 'name', 'description', 'kind', 'category_id', 'uom_id',
         'purchase_uom_id', 'sale_price', 'purchase_price', 'currency', 'sale_tax_id',
         'purchase_tax_id', 'is_sellable', 'is_purchasable', 'is_active', 'attributes',
-        'created_at', 'updated_at'],
+        'artikel_no', 'shelf_location', 'created_at', 'updated_at'],
       writable: ['sku', 'barcode', 'name', 'description', 'kind', 'category_id', 'uom_id',
         'purchase_uom_id', 'sale_price', 'purchase_price', 'currency', 'sale_tax_id',
-        'purchase_tax_id', 'is_sellable', 'is_purchasable', 'is_active', 'attributes'],
+        'purchase_tax_id', 'is_sellable', 'is_purchasable', 'is_active', 'attributes',
+        'artikel_no', 'shelf_location'],
       searchable: ['name', 'sku', 'barcode'],
       defaultSort: 'name', defaultOrder: 'asc',
     });

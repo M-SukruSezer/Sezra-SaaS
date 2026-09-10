@@ -75,6 +75,7 @@ export interface Partner {
   tax_office: string | null; tax_no: string | null; email: string | null; phone: string | null;
   city: string | null; district: string | null; address: string | null;
   payment_term_days: number; owner_id: string | null; is_active: boolean; branch_id: string | null;
+  currency?: string | null;
   // v_partner_list ayrıca çözümlenmiş adları taşır: liste ekranı kimlik
   // göstermek zorunda kalmasın diye.
   created_at?: string; owner_name?: string | null; branch_name?: string | null;
@@ -105,6 +106,7 @@ export interface SalesDocument {
 export interface Product {
   id: string; sku: string; name: string; kind: string; uom_id: string | null;
   sale_price: string; sale_tax_id: string | null; currency: string; is_active: boolean;
+  artikel_no?: string | null; shelf_location?: string | null;
 }
 
 export interface Stage { id: string; pipeline_id: string; name: string; sequence: number; probability: number; is_won: boolean; is_lost: boolean }

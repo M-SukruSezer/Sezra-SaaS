@@ -275,6 +275,16 @@ export function Products() {
       disa: (s) => s.currency,
     },
     {
+      anahtar: 'artikel_no', baslik: 'Artikel No', gizliBaslangic: true, suz: 'metin',
+      govde: (s) => <span className="num">{s.artikel_no ?? ''}</span>,
+      disa: (s) => s.artikel_no ?? '',
+    },
+    {
+      anahtar: 'shelf_location', baslik: 'Raf/Lokasyon', gizliBaslangic: true, suz: 'metin',
+      govde: (s) => <>{s.shelf_location ?? ''}</>,
+      disa: (s) => s.shelf_location ?? '',
+    },
+    {
       anahtar: 'is_active', baslik: 'Durum', suz: 'secim', gruplanir: true,
       secenekler: [{ deger: 'true', etiket: 'Aktif' }, { deger: 'false', etiket: 'Pasif' }],
       govde: (s) => (s.is_active
@@ -296,7 +306,7 @@ export function Products() {
       yazmaIzni="core.product.create"
       silmeIzni="core.product.delete.all"
       yazilabilir={['sku', 'barcode', 'name', 'description', 'kind',
-        'sale_price', 'purchase_price', 'currency']}
+        'sale_price', 'purchase_price', 'currency', 'artikel_no', 'shelf_location']}
       sayimlar={(toplam, satirlar) => [
         { deger: toplam, etiket: 'ürün' },
         { deger: satirlar.filter((s) => s.is_active).length, etiket: 'aktif' },
