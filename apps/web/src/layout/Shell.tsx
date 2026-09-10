@@ -17,7 +17,7 @@ import { LogOut, Menu, Moon, Sparkles, Sun, Zap } from 'lucide-react';
 import {
   AlertTriangle, Banknote, BarChart3, Boxes, Building2, CalendarDays,
   ClipboardCheck, ClipboardList, Contact, FileSpreadsheet, FileText, FolderKanban,
-  Gauge, Handshake, History, KanbanSquare, Landmark, Layers,
+  Gauge, Handshake, History, Inbox, KanbanSquare, Landmark, Layers,
   ListChecks, Package, PackageCheck, Palette, Receipt, ScanLine,
   ScrollText, Shield, Store, Tag, Ticket, TrendingUp,
   Truck, UserCog, Users, Wrench,
@@ -152,6 +152,12 @@ const NAV: NavGroup[] = [
     // madde çıkan bir başlık, kullanıcıya iki tıklama karşılığında hiçbir
     // şey vermez. Aşağıda doğrudan bağlantı olarak çizilir.
     items: [{ to: '/', label: 'Anlık Görünüm', simge: Gauge }],
+  },
+  {
+    // Kişisel posta: modüle ya da role bağlı değil, bağlı hesabı olan herkese
+    // görünür. Yetki sınırını sunucu çizer (RLS owner-only).
+    key: 'mail', icon: 'panel', group: 'Posta',
+    items: [{ to: '/mail', label: 'Gelen Kutusu', simge: Inbox }],
   },
   {
     key: 'crm', icon: 'pipeline', group: 'CRM & Satış',
