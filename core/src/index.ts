@@ -6,7 +6,8 @@ export { registerResource } from './resource.js';
 export type { ResourceDef } from './resource.js';
 export { createApp } from './app.js';
 export type { CreateAppOptions } from './app.js';
-export type { SezraModule } from './module.js';
+export { resolveModuleOrder } from './module.js';
+export type { SezraModule, ModuleRegistryRow } from './module.js';
 export { coreModule } from './coreModule.js';
 export { registerSearchSource, type AramaKaynagi, type AramaSatiri } from './search.js';
 export {

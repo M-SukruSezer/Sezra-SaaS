@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { withContext, sql, assertSafeDbRole } from './db.js';
 import { contextFromRequest } from './auth.js';
 import { AppError, translatePgError } from './errors.js';
-import type { SezraModule } from './module.js';
+import { resolveModuleOrder, type SezraModule, type ModuleRegistryRow } from './module.js';
 
 export interface CreateAppOptions {
   modules: SezraModule[];
@@ -136,15 +136,12 @@ export async function createApp(opts: CreateAppOptions): Promise<FastifyInstance
     });
   });
 
-  // Modülleri yükle — veritabanında kayıtlı olmayan modül reddedilir
-  const registered = await sql<{ code: string }[]>`select code from core.modules`;
-  const known = new Set(registered.map((r) => r.code));
-  for (const mod of opts.modules) {
-    if (!known.has(mod.code)) {
-      throw new Error(
-        `"${mod.code}" modülü core.modules'ta kayıtlı değil — migration'ı çalıştırılmamış olabilir`,
-      );
-    }
+  // Modülleri yükle. Kayıt defteri iki kapıdır birden: modülün KAYITLI olması
+  // ve BAĞIMLILIKLARININ da yükleniyor olması. Yükleme sırası `opts.modules`
+  // dizisinden değil `depends_on`'dan türetilir — dizi "hangi modüller"i
+  // söyler, "hangi sırayla"yı söylemez.
+  const registry = await sql<ModuleRegistryRow[]>`select code, depends_on from core.modules`;
+  for (const mod of resolveModuleOrder(opts.modules, registry)) {
     await mod.register(app);
     app.log.info({ module: mod.code }, 'modül yüklendi');
   }
