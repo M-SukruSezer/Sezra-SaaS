@@ -1,0 +1,2 @@
+# Regenerable analysis artifacts: rebuild with `python3 -I build_indexes.py`
+*.json
